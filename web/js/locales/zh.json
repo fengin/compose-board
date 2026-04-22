@@ -17,6 +17,7 @@
     "username": "用户名",
     "password": "密码",
     "login_button": "登 录",
+    "logging_in": "登录中...",
     "login_success": "登录成功",
     "login_failed": "登录失败",
     "logout": "退出登录",

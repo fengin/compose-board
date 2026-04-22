@@ -32,7 +32,8 @@ const router = createRouter({
     const app = createApp({
         data() {
             return {
-                isAuthenticated: API.isAuthenticated()
+                isAuthenticated: API.isAuthenticated(),
+                locale: I18n.locale
             };
         },
         created() {
@@ -52,12 +53,32 @@ const router = createRouter({
             onLogout() {
                 API.clearToken();
                 this.isAuthenticated = false;
+            },
+            async switchLanguage() {
+                const next = this.locale === 'zh' ? 'en' : 'zh';
+                await I18n.switchLocale(next);
+                this.locale = next;
             }
+        },
+        provide() {
+            // 让子组件能访问响应式 locale 和切换方法
+            return {
+                getLocale: () => this.locale,
+                switchLanguage: this.switchLanguage
+            };
         }
     });
 
-    // 注册 i18n 全局方法，模板中通过 $t('key') 调用
-    app.config.globalProperties.$t = I18n.t.bind(I18n);
+    // 注册 i18n 全局方法：通过 mixin 注入 $t()
+    // 访问 this.$root.locale 建立响应式依赖，locale 变化时自动重渲染（不销毁组件）
+    app.mixin({
+        methods: {
+            $t(key, params) {
+                void this.$root.locale;
+                return I18n.t(key, params);
+            }
+        }
+    });
 
     // 注册全局组件
     app.component('login-page', LoginPage);

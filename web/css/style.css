@@ -213,6 +213,48 @@ h3 { font-size: 1.15rem; }
     font-size: 0.85rem;
 }
 
+/* === 语言切换按钮 === */
+.btn-lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--color-fg-secondary);
+    font-family: var(--font-ui);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn-lang:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+.btn-lang svg {
+    opacity: 0.7;
+}
+.btn-lang:hover svg {
+    opacity: 1;
+}
+/* 登录页语言按钮定位 */
+.login-lang {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    border-color: rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.7);
+    z-index: 10;
+}
+.login-lang:hover {
+    border-color: rgba(255,255,255,0.6);
+    color: #fff;
+    background: rgba(255,255,255,0.1);
+}
+
 /* === 按钮 === */
 .btn {
     display: inline-flex;
@@ -923,7 +965,7 @@ tr[data-status="not_deployed"]:hover {
 /* === 容器操作按钮系统 === */
 .action-grid {
     display: grid;
-    grid-template-columns: repeat(3, 52px);
+    grid-template-columns: repeat(3, 60px);
     gap: 5px;
 }
 
@@ -932,7 +974,7 @@ tr[data-status="not_deployed"]:hover {
     align-items: center;
     justify-content: center;
     gap: 2px;
-    width: 52px;
+    width: 60px;
     height: 26px;
     padding: 0;
     border: 1px solid var(--color-border);

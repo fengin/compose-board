@@ -22,13 +22,13 @@
     <div id="app">
         <!-- Vue 应用挂载点 -->
         <template v-if="!isAuthenticated">
-            <login-page @login-success="onLoginSuccess"></login-page>
+            <login-page @login-success="onLoginSuccess" @switch-language="switchLanguage"></login-page>
         </template>
         <template v-else>
             <div class="app-layout">
                 <app-sidebar></app-sidebar>
                 <div class="app-main">
-                    <app-header @logout="onLogout"></app-header>
+                    <app-header @logout="onLogout" @switch-language="switchLanguage"></app-header>
                     <div class="app-content">
                         <router-view></router-view>
                     </div>

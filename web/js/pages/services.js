@@ -36,7 +36,7 @@ const ServicesPage = {
                                 <th style="width:90px">{{ $t('services.table.cpu') }}</th>
                                 <th style="width:100px">{{ $t('services.table.memory') }}</th>
                                 <th style="width:110px">{{ $t('services.table.uptime') }}</th>
-                                <th style="width:200px">{{ $t('services.table.actions') }}</th>
+                                <th style="width:220px">{{ $t('services.table.actions') }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -129,7 +129,7 @@ const ServicesPage = {
                                     <th style="width:90px">{{ $t('services.table.cpu') }}</th>
                                     <th style="width:100px">{{ $t('services.table.memory') }}</th>
                                     <th style="width:110px">{{ $t('services.table.uptime') }}</th>
-                                    <th style="width:200px">{{ $t('services.table.actions') }}</th>
+                                    <th style="width:220px">{{ $t('services.table.actions') }}</th>
                                 </tr>
                             </thead>
                             <tbody>

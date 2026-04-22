@@ -17,6 +17,7 @@
     "username": "Username",
     "password": "Password",
     "login_button": "Sign In",
+    "logging_in": "Signing in...",
     "login_success": "Login successful",
     "login_failed": "Login failed",
     "logout": "Logout",

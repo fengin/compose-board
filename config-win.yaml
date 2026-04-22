@@ -1,0 +1,9 @@
+server:
+  port: 9090
+
+auth:
+  username: admin
+  password: admin123
+
+project:
+  dir: "d:\\code\\work\\deploy\\docker-compose\\projects\\test-win"
