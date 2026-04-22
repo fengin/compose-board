@@ -1,0 +1,32 @@
+# === Go ===
+bin/
+.gocache/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === 项目特定 ===
+composeboard
+composeboard.log
+config.yaml
+*.bak
+*.tmp
+
+# === 测试脚本 ===
+test-*.sh

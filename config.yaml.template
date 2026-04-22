@@ -1,0 +1,33 @@
+# ComposeBoard 配置文件模板
+# 复制为 config.yaml 后修改
+
+server:
+  host: "0.0.0.0"
+  port: 9090
+
+# 项目配置
+project:
+  dir: "/opt/compose-project"        # docker-compose 项目目录（必填）
+  name: "我的项目"                    # 项目显示名称（可选，缺省取目录名）
+
+# 认证配置
+auth:
+  username: "admin"
+  password: "changeme"               # 请修改为安全密码
+  jwt_secret: ""                     # 留空则使用默认值（建议自定义）
+
+# Compose 命令配置
+compose:
+  command: "auto"                    # "auto" | "docker-compose" | "docker compose"
+
+# 生命周期钩子
+hooks:
+  pre_deploy: ""                     # 部署前执行的脚本路径
+  post_deploy: ""                    # 部署后执行的脚本路径
+
+# 扩展功能（默认关闭）
+extensions:
+  host_ip:
+    enabled: false                   # 是否启用 HOST_IP 自适应检测
+    env_key: "HOST_IP"               # .env 中的变量名
+    detect_on_startup: true          # 启动时自动检测

@@ -1,0 +1,52 @@
+<!--
+  ComposeBoard - Docker Compose 可视化管理面板
+  作者：凌封
+  网址：https://fengin.cn
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComposeBoard — Docker Compose 可视化管理面板</title>
+    <meta name="description" content="轻量级 Docker Compose 可视化运维管理面板">
+
+    <!-- Local vendor assets (bundled by go:embed, no external network required) -->
+    <link rel="stylesheet" href="/css/vendor/google-fonts.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/vendor/vue.global.prod.js"></script>
+    <script src="/js/vendor/vue-router.global.prod.js"></script>
+    <script src="/js/i18n.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Vue 应用挂载点 -->
+        <template v-if="!isAuthenticated">
+            <login-page @login-success="onLoginSuccess"></login-page>
+        </template>
+        <template v-else>
+            <div class="app-layout">
+                <app-sidebar></app-sidebar>
+                <div class="app-main">
+                    <app-header @logout="onLogout"></app-header>
+                    <div class="app-content">
+                        <router-view></router-view>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- App Scripts -->
+    <script src="/js/api.js"></script>
+    <script src="/js/components/sidebar.js"></script>
+    <script src="/js/components/header.js"></script>
+    <script src="/js/components/status-badge.js"></script>
+    <script src="/js/pages/login.js"></script>
+    <script src="/js/pages/dashboard.js"></script>
+    <script src="/js/pages/services.js"></script>
+    <script src="/js/pages/logs.js"></script>
+    <script src="/js/pages/env.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
