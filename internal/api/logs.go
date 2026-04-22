@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fengin/composeboard/internal/docker"
@@ -22,6 +24,7 @@ import (
 
 const (
 	logRetryDelay        = 1200 * time.Millisecond
+	logSourceCheckDelay  = 800 * time.Millisecond
 	logScannerBufferSize = 64 * 1024
 	logScannerMaxToken   = 1024 * 1024
 )
@@ -96,10 +99,11 @@ type serviceLogStreamer struct {
 	serviceName string
 	initialTail string
 
-	lastTimestamp  string
-	lastLine       string
-	lastStatus     string
-	skipReplayLine bool
+	lastContainerID string
+	lastTimestamp   string
+	lastLine        string
+	lastStatus      string
+	skipReplayLine  bool
 }
 
 func (s *serviceLogStreamer) Stream(ctx context.Context, writer io.Writer, flusher http.Flusher) error {
@@ -108,7 +112,7 @@ func (s *serviceLogStreamer) Stream(ctx context.Context, writer io.Writer, flush
 			return err
 		}
 
-		_, containerID, err := s.dockerCli.FindContainerByServiceName(ctx, s.serviceName)
+		status, containerID, err := s.dockerCli.FindContainerByServiceName(ctx, s.serviceName)
 		if err != nil {
 			if errors.Is(err, docker.ErrNotFound) {
 				if err := s.writeStatus(writer, flusher, "waiting"); err != nil {
@@ -120,8 +124,17 @@ func (s *serviceLogStreamer) Stream(ctx context.Context, writer io.Writer, flush
 			}
 			continue
 		}
+		if !isAttachableLogStatus(status.Status) {
+			if err := s.writeStatus(writer, flusher, "waiting"); err != nil {
+				return err
+			}
+			if !waitForNextAttempt(ctx, logRetryDelay) {
+				return ctx.Err()
+			}
+			continue
+		}
 
-		tail, since := s.nextCursor()
+		tail, since := s.nextCursor(containerID)
 		reader, err := s.dockerCli.GetContainerLogs(ctx, containerID, tail, true, since)
 		if err != nil {
 			if err := s.writeStatus(writer, flusher, "reconnecting"); err != nil {
@@ -137,8 +150,18 @@ func (s *serviceLogStreamer) Stream(ctx context.Context, writer io.Writer, flush
 			return err
 		}
 
+		done := make(chan struct{})
+		var closeOnce sync.Once
+		closeReader := func() {
+			closeOnce.Do(func() {
+				_ = reader.Close()
+			})
+		}
+		go s.watchLogSource(ctx, containerID, done, closeReader)
+
 		err = s.pipeReader(ctx, reader, writer, flusher)
-		_ = reader.Close()
+		close(done)
+		closeReader()
 		if err != nil && !errors.Is(err, context.Canceled) {
 			if err := s.writeStatus(writer, flusher, "reconnecting"); err != nil {
 				return err
@@ -155,7 +178,14 @@ func (s *serviceLogStreamer) Stream(ctx context.Context, writer io.Writer, flush
 	}
 }
 
-func (s *serviceLogStreamer) nextCursor() (string, string) {
+func (s *serviceLogStreamer) nextCursor(containerID string) (string, string) {
+	if containerID != s.lastContainerID {
+		s.lastContainerID = containerID
+		s.lastTimestamp = ""
+		s.lastLine = ""
+		s.skipReplayLine = false
+		return s.initialTail, ""
+	}
 	if s.lastTimestamp != "" {
 		s.skipReplayLine = true
 		return "0", s.lastTimestamp
@@ -178,8 +208,8 @@ func (s *serviceLogStreamer) pipeReader(ctx context.Context, reader io.Reader, w
 				continue
 			}
 		}
-		if ts := extractLogTimestamp(line); ts != "" {
-			s.lastTimestamp = ts
+		if sinceValue := extractLogSinceValue(line); sinceValue != "" {
+			s.lastTimestamp = sinceValue
 		}
 		s.lastLine = line
 
@@ -192,6 +222,36 @@ func (s *serviceLogStreamer) pipeReader(ctx context.Context, reader io.Reader, w
 		return err
 	}
 	return nil
+}
+
+func (s *serviceLogStreamer) watchLogSource(
+	ctx context.Context,
+	attachedContainerID string,
+	done <-chan struct{},
+	closeReader func(),
+) {
+	ticker := time.NewTicker(logSourceCheckDelay)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			closeReader()
+			return
+		case <-done:
+			return
+		case <-ticker.C:
+			if shouldRotate, err := s.shouldRotateLogSource(ctx, attachedContainerID); err == nil && shouldRotate {
+				closeReader()
+				return
+			}
+		}
+	}
+}
+
+func (s *serviceLogStreamer) shouldRotateLogSource(ctx context.Context, attachedContainerID string) (bool, error) {
+	status, currentContainerID, err := s.dockerCli.FindContainerByServiceName(ctx, s.serviceName)
+	return shouldRotateLogSourceState(status, currentContainerID, attachedContainerID, err)
 }
 
 func readLogLines(reader io.Reader) ([]string, error) {
@@ -255,6 +315,55 @@ func extractLogTimestamp(line string) string {
 		return firstField
 	}
 	return ""
+}
+
+func extractLogSinceValue(line string) string {
+	ts := extractLogTimestamp(line)
+	if ts == "" {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		parsed, err = time.Parse(time.RFC3339, ts)
+		if err != nil {
+			return ""
+		}
+	}
+	// Docker logs API 使用 Unix 时间戳最稳妥，避免 RFC3339 字符串在续挂时被拒绝。
+	return strconv.FormatInt(parsed.Unix(), 10)
+}
+
+func shouldRotateLogSourceState(
+	status *docker.ContainerStatus,
+	currentContainerID string,
+	attachedContainerID string,
+	err error,
+) (bool, error) {
+	if err != nil {
+		if errors.Is(err, docker.ErrNotFound) {
+			return true, nil
+		}
+		return false, err
+	}
+	if status == nil {
+		return true, nil
+	}
+	if currentContainerID != attachedContainerID {
+		return true, nil
+	}
+	if !isAttachableLogStatus(status.Status) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func isAttachableLogStatus(status string) bool {
+	switch status {
+	case "running", "restarting":
+		return true
+	default:
+		return false
+	}
 }
 
 // cleanLogLine 清理 Docker 日志前缀（8 字节 stream header）

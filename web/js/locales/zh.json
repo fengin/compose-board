@@ -193,7 +193,7 @@
     "empty_hint": "选择服务并点击\"连接\"查看实时日志",
     "reconnect_success": "日志流已重新连接",
     "reconnect_failed": "日志流重连失败，请手动重连",
-    "reconnect_banner": "连接已断开，正在尝试重连 ({attempt}/{max})..."
+    "reconnect_banner": "连接已断开，正在尝试第 {attempt} 次重连..."
   },
   "terminal": {
     "title": "Web 终端",

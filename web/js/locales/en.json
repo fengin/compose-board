@@ -193,7 +193,7 @@
     "empty_hint": "Select a service and click \"Connect\" to view real-time logs",
     "reconnect_success": "Log stream reconnected",
     "reconnect_failed": "Log stream reconnect failed, please reconnect manually",
-    "reconnect_banner": "Disconnected, reconnecting ({attempt}/{max})..."
+    "reconnect_banner": "Disconnected, reconnecting (attempt {attempt})..."
   },
   "terminal": {
     "title": "Web Terminal",

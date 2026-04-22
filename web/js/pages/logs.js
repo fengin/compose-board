@@ -3,7 +3,9 @@
  * 作者：凌封
  * 网址：https://fengin.cn
  *
- * 日志查看页面组件 — SSE 实时流 + 断线自动重连
+ * 日志查看页面组件 — SSE 实时流
+ * 后端维护持续连接：容器停→waiting→容器恢复→自动streaming
+ * 前端仅在 HTTP 连接本身断开时做自动重连（如 ComposeBoard 重启、网络断）
  */
 const LogsPage = {
     template: `
@@ -67,9 +69,8 @@ const LogsPage = {
             maxLines: 2000,
             nextLogId: 0,
             hasShownConnectedToast: false,
-            // 重连相关
+            // 重连相关（仅处理 HTTP 连接断开的场景）
             reconnectAttempt: 0,
-            reconnectMaxAttempts: 5,
             reconnectTimer: null,
             reconnectBanner: false,
             userDisconnected: false
@@ -77,7 +78,7 @@ const LogsPage = {
     },
     computed: {
         sessionActive() {
-            return this.connected || !!this.eventSource;
+            return this.connected || !!this.eventSource || !!this.reconnectTimer;
         },
         statusInfo() {
             switch (this.streamState) {
@@ -104,8 +105,7 @@ const LogsPage = {
         },
         reconnectBannerText() {
             return this.$t('logs.reconnect_banner')
-                .replace('{attempt}', this.reconnectAttempt)
-                .replace('{max}', this.reconnectMaxAttempts);
+                .replace('{attempt}', this.reconnectAttempt);
         }
     },
     methods: {
@@ -159,6 +159,9 @@ const LogsPage = {
                 this.enqueueLogLine(event.data);
             };
 
+            // 后端通过 status 事件通知连接状态变化（streaming/waiting/reconnecting）
+            // 容器停止→后端发 waiting；容器恢复→后端自动重连日志→发 streaming
+            // 前端只需更新 UI 状态，不需要重建连接
             this.eventSource.addEventListener('status', (event) => {
                 try {
                     const payload = JSON.parse(event.data || '{}');
@@ -170,6 +173,8 @@ const LogsPage = {
                 }
             });
 
+            // onerror 仅在 HTTP 连接本身断开时触发（ComposeBoard 重启/网络断）
+            // 容器停止不会触发此事件——后端会保持 SSE 连接并发 status: waiting
             this.eventSource.onerror = () => {
                 // G-5: 401 时手动关闭，防止无限重连
                 if (!API.isAuthenticated()) {
@@ -178,39 +183,42 @@ const LogsPage = {
                     if (API.onUnauthorized) API.onUnauthorized();
                     return;
                 }
-                this.connected = false;
-                this.closeEventSource();
 
-                // 用户主动断开不重连
-                if (this.userDisconnected) {
-                    this.streamState = 'disconnected';
-                    return;
+                // EventSource readyState: CONNECTING=0, OPEN=1, CLOSED=2
+                // 浏览器会自动重连 CONNECTING 状态的 EventSource
+                // 只有 CLOSED 才需要我们手动重连
+                if (this.eventSource && this.eventSource.readyState === EventSource.CLOSED) {
+                    this.connected = false;
+                    this.closeEventSource();
+
+                    // 用户主动断开不重连
+                    if (this.userDisconnected) {
+                        this.streamState = 'disconnected';
+                        return;
+                    }
+
+                    // 自动重连
+                    this.scheduleReconnect();
+                } else {
+                    // CONNECTING 状态：浏览器正在自动重连，更新 UI 状态即可
+                    this.connected = false;
+                    this.streamState = 'reconnecting';
                 }
-
-                // 自动重连（指数退避）
-                this.scheduleReconnect();
             };
         },
-        /** 关闭 EventSource（不清理状态） */
+        /** 关闭 EventSource（不清理业务状态） */
         closeEventSource() {
             if (this.eventSource) {
                 this.eventSource.close();
                 this.eventSource = null;
             }
         },
-        /** 计划自动重连（指数退避: 1s, 2s, 4s, 8s, 16s） */
+        /** 计划自动重连（指数退避: 1s, 2s, 4s, 封顶10s） */
         scheduleReconnect() {
             this.reconnectAttempt++;
-            if (this.reconnectAttempt > this.reconnectMaxAttempts) {
-                // 超过最大重连次数
-                this.streamState = 'disconnected';
-                this.reconnectBanner = false;
-                Toast.error(this.$t('logs.reconnect_failed'));
-                return;
-            }
             this.streamState = 'reconnecting';
             this.reconnectBanner = true;
-            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 16000);
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 10000);
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
                 this.connect();
