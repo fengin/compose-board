@@ -113,7 +113,12 @@ func WriteEnvEntries(path string, entries []EnvEntry) error {
 	for _, e := range entries {
 		switch e.Type {
 		case "variable":
-			lines = append(lines, fmt.Sprintf("%s=%s", e.Key, e.Value))
+			// 优先使用 Raw 保留原始格式（引号/行内注释/缩进）
+			if e.Raw != "" {
+				lines = append(lines, e.Raw)
+			} else {
+				lines = append(lines, fmt.Sprintf("%s=%s", e.Key, e.Value))
+			}
 		case "comment", "blank":
 			lines = append(lines, e.Raw)
 		}

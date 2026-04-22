@@ -160,7 +160,12 @@ const EnvPage = {
             this.loading = true;
             try {
                 const data = await API.getEnvFile();
-                this.entries = data.entries || [];
+                this.entries = (data.entries || []).map(e => {
+                    if (e.type === 'variable') {
+                        return { ...e, _originalValue: e.value };
+                    }
+                    return e;
+                });
                 this.rawText = data.raw_text || '';
                 this.originalRawText = this.rawText;
                 this.filePath = data.file_path || '';
@@ -218,9 +223,9 @@ const EnvPage = {
             try {
                 let result;
                 if (this.editMode === 'table') {
-                    // M-2: 表格模式走 entries，保留注释/空行的 raw 格式
+                    // 只重建值被修改过的变量的 raw，未修改的保留原始 raw（含引号/行内注释）
                     const entries = this.entries.map(e => {
-                        if (e.type === 'variable') {
+                        if (e.type === 'variable' && e.value !== e._originalValue) {
                             return { ...e, raw: `${e.key}=${e.value}` };
                         }
                         return e;
