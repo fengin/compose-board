@@ -190,7 +190,10 @@
     "tail_lines": "行数",
     "btn_disconnect": "断开",
     "btn_connect": "连接",
-    "empty_hint": "选择服务并点击\"连接\"查看实时日志"
+    "empty_hint": "选择服务并点击\"连接\"查看实时日志",
+    "reconnect_success": "日志流已重新连接",
+    "reconnect_failed": "日志流重连失败，请手动重连",
+    "reconnect_banner": "连接已断开，正在尝试重连 ({attempt}/{max})..."
   },
   "terminal": {
     "title": "Web 终端",
@@ -227,6 +230,7 @@
     "unknown": "未知",
     "none": "无",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "request_failed": "请求失败 ({status})"
   }
 }

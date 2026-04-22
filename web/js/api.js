@@ -60,13 +60,13 @@ const API = {
             if (this.onUnauthorized) {
                 this.onUnauthorized();
             }
-            throw new Error('认证已过期，请重新登录');
+            throw new Error(I18n.t('auth.token_expired'));
         }
 
         const data = await resp.json();
         if (!resp.ok) {
             // G-1: 保留错误码供前端按业务分支处理
-            const err = new Error(data.error || `请求失败 (${resp.status})`);
+            const err = new Error(data.error || I18n.t('common.request_failed', { status: resp.status }));
             err.code = data.code || '';
             err.status = resp.status;
             throw err;

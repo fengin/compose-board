@@ -190,7 +190,10 @@
     "tail_lines": "Lines",
     "btn_disconnect": "Disconnect",
     "btn_connect": "Connect",
-    "empty_hint": "Select a service and click \"Connect\" to view live logs"
+    "empty_hint": "Select a service and click \"Connect\" to view real-time logs",
+    "reconnect_success": "Log stream reconnected",
+    "reconnect_failed": "Log stream reconnect failed, please reconnect manually",
+    "reconnect_banner": "Disconnected, reconnecting ({attempt}/{max})..."
   },
   "terminal": {
     "title": "Web Terminal",
@@ -227,6 +230,7 @@
     "unknown": "Unknown",
     "none": "None",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "request_failed": "Request failed ({status})"
   }
 }

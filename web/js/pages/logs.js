@@ -3,7 +3,7 @@
  * 作者：凌封
  * 网址：https://fengin.cn
  *
- * 日志查看页面组件 — SSE 实时流
+ * 日志查看页面组件 — SSE 实时流 + 断线自动重连
  */
 const LogsPage = {
     template: `
@@ -34,6 +34,11 @@ const LogsPage = {
             </span>
         </div>
 
+        <!-- 断线重连 banner -->
+        <div v-if="reconnectBanner" class="log-reconnect-banner">
+            ⚠ {{ reconnectBannerText }}
+        </div>
+
         <div class="log-terminal hover-scroll" ref="terminal">
             <div v-if="logs.length === 0 && !sessionActive" style="color:var(--color-fg-tertiary);padding:40px;text-align:center">
                 {{ $t('logs.empty_hint') }}
@@ -61,7 +66,13 @@ const LogsPage = {
             flushTimer: null,
             maxLines: 2000,
             nextLogId: 0,
-            hasShownConnectedToast: false
+            hasShownConnectedToast: false,
+            // 重连相关
+            reconnectAttempt: 0,
+            reconnectMaxAttempts: 5,
+            reconnectTimer: null,
+            reconnectBanner: false,
+            userDisconnected: false
         };
     },
     computed: {
@@ -90,6 +101,11 @@ const LogsPage = {
                 alignItems: 'center',
                 gap: '4px'
             };
+        },
+        reconnectBannerText() {
+            return this.$t('logs.reconnect_banner')
+                .replace('{attempt}', this.reconnectAttempt)
+                .replace('{max}', this.reconnectMaxAttempts);
         }
     },
     methods: {
@@ -107,15 +123,19 @@ const LogsPage = {
         },
         toggleConnection() {
             if (this.sessionActive) {
+                this.userDisconnected = true;
                 this.disconnect();
             } else {
+                this.userDisconnected = false;
                 this.connect();
             }
         },
         connect() {
             if (!this.selectedService) return;
-            this.disconnect();
-            this.resetLogState();
+            this.closeEventSource();
+            if (this.reconnectAttempt === 0) {
+                this.resetLogState();
+            }
 
             this.eventSource = API.createLogStream(this.selectedService, this.tailLines);
             this.connected = true;
@@ -123,10 +143,16 @@ const LogsPage = {
 
             this.eventSource.onopen = () => {
                 this.connected = true;
-                if (!this.hasShownConnectedToast) {
+                // 重连成功
+                if (this.reconnectAttempt > 0) {
+                    Toast.success(this.$t('logs.reconnect_success'));
+                } else if (!this.hasShownConnectedToast) {
                     this.hasShownConnectedToast = true;
                     Toast.info(this.selectedService + ' ' + this.$t('logs.connected'));
                 }
+                // 清理重连状态
+                this.reconnectAttempt = 0;
+                this.reconnectBanner = false;
             };
 
             this.eventSource.onmessage = (event) => {
@@ -153,22 +179,64 @@ const LogsPage = {
                     return;
                 }
                 this.connected = false;
-                this.streamState = 'disconnected';
+                this.closeEventSource();
+
+                // 用户主动断开不重连
+                if (this.userDisconnected) {
+                    this.streamState = 'disconnected';
+                    return;
+                }
+
+                // 自动重连（指数退避）
+                this.scheduleReconnect();
             };
         },
-        disconnect() {
-            this.flushPendingLogs();
-            this.clearFlushTimer();
+        /** 关闭 EventSource（不清理状态） */
+        closeEventSource() {
             if (this.eventSource) {
                 this.eventSource.close();
                 this.eventSource = null;
             }
+        },
+        /** 计划自动重连（指数退避: 1s, 2s, 4s, 8s, 16s） */
+        scheduleReconnect() {
+            this.reconnectAttempt++;
+            if (this.reconnectAttempt > this.reconnectMaxAttempts) {
+                // 超过最大重连次数
+                this.streamState = 'disconnected';
+                this.reconnectBanner = false;
+                Toast.error(this.$t('logs.reconnect_failed'));
+                return;
+            }
+            this.streamState = 'reconnecting';
+            this.reconnectBanner = true;
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 16000);
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.connect();
+            }, delay);
+        },
+        disconnect() {
+            this.flushPendingLogs();
+            this.clearFlushTimer();
+            this.clearReconnectTimer();
+            this.closeEventSource();
             this.connected = false;
             this.streamState = 'disconnected';
             this.hasShownConnectedToast = false;
+            this.reconnectAttempt = 0;
+            this.reconnectBanner = false;
+        },
+        clearReconnectTimer() {
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+            }
         },
         reconnect() {
             if (this.sessionActive) {
+                this.userDisconnected = false;
+                this.reconnectAttempt = 0;
                 this.connect();
             }
         },
@@ -243,6 +311,7 @@ const LogsPage = {
         }
     },
     beforeUnmount() {
+        this.userDisconnected = true;
         this.disconnect();
         this.clearFlushTimer();
     }

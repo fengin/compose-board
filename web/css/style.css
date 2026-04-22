@@ -1029,3 +1029,20 @@ tr[data-status="not_deployed"]:hover {
     font-weight: 700;
 }
 .act-rebuild:hover { background: #7C3AED; color: #fff; border-color: #7C3AED; }
+
+/* === 日志重连 Banner === */
+.log-reconnect-banner {
+    background: #FFFBEB;
+    color: #92400E;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: var(--radius);
+    margin: 0 0 8px 0;
+    border: 1px solid #FDE68A;
+    animation: reconnect-pulse 2s ease-in-out infinite;
+}
+@keyframes reconnect-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
