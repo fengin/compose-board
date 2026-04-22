@@ -181,26 +181,39 @@
 ## Phase 2: 增值功能
 
 ### 2.1 设置页
-- [ ] 未开始
+- [x] 评估后关闭
+- ℹ️ 高优先级功能（项目信息/Compose版本/Docker信息/语言切换）已在 Phase 1 的 Dashboard + Header 中实现
+- ℹ️ 剩余项（生命周期钩子/开机自启动）依赖 Phase 3 部署向导，暂不单独做
 
-### 2.2 WebSocket 日志增强
-- [ ] 未开始
+### 2.2 SSE 日志增强
+- [x] 完成
+- ✅ 前端：SSE 断线自动重连（指数退避 1s→10s 封顶，持续重连）
+- ✅ 前端：断线重连 banner（橙色脉冲动画提示重连进度）
+- ✅ 前端：区分用户主动断开 vs 异常断线，仅异常触发重连
+- ✅ 前端：onerror 按 readyState 区分 CLOSED/CONNECTING 两种场景
+- ✅ 后端三层 Bug 修复：
+  - L1: 续挂游标 RFC3339→Unix 时间戳，避免 Docker API 拒绝 since 参数
+  - L2: `isAttachableLogStatus()` 门控，exited 容器不再盲目 attach
+  - L3: 容器重建后 containerID 比对，主动断开旧 reader 防止挂在旧容器
+- ✅ 单元测试覆盖：extractLogSinceValue / isAttachableLogStatus / 容器 ID 变更检测
 
-### 2.3 .env 行级模型完善 + 编辑器深度优化
-- [ ] 未开始
-- ℹ️ 包含：R-2 WriteEnvEntries 用 Raw 保留引号/空格、多行变量支持
+### 2.3 .env 编辑器优化
+- [x] 完成
+- ✅ 后端：WriteEnvEntries 优先使用 Raw 保留原始格式（引号/行内注释/缩进）
+- ✅ 前端：表格模式保存时只重建值被修改过的条目，未修改的保留原始 raw
 
 ### 2.4 Web 终端
 - [ ] 未开始
 
-### 2.5 services.js 组件拆分
+### 2.5 错误处理 i18n 统一化
+- [x] 完成
+- ✅ api.js 硬编码中文（认证过期/请求失败）改为 `I18n.t()` 调用
+- ✅ 新增 i18n key：`common.request_failed`、`logs.reconnect_*` 系列
+
+### 2.6 services.js 组件拆分
 - [ ] 未开始
 - ℹ️ 拆分为 ServiceTable / UpgradeModal / ConfirmDialog
 - ℹ️ 顺手清理：T-3 extractVersion 私有 registry 误识别、T-4 profileLoading 泄漏
-
-### 2.6 错误处理统一化
-- [ ] 未开始
-- ℹ️ api.js 基础层 i18n 架构设计（是否让基础层感知 i18n）独立评审
 
 ---
 
@@ -220,3 +233,7 @@
 | 2026-04-21 | 1.10 | ✅ API 层完成：7 个 API 文件 + main.go 全量串联，所有 TODO 已替换为实际路由 |
 | 2026-04-22 | 1.11 | ✅ 前端重构完成：containers→services 架构转型、后端微调（settings/PUT env/PendingEnv）、SSE 日志、分档时序策略 |
 | 2026-04-22 | 1.11-fix | ✅ 两轮外部 Review 修复：M-1/M-2 env 模型适配、T-7 poll 竞态、T-1 定时刷新、T-2 失败快反、T-6 SSE 限制、全量 i18n 搬家 |
+| 2026-04-23 | 2.2 | ✅ SSE 日志增强：前端断线自动重连 + 后端三层 Bug 修复（since 格式/exited 门控/容器 ID 变更） |
+| 2026-04-23 | 2.3 | ✅ .env 编辑器优化：WriteEnvEntries 用 Raw 保留引号、前端按需重建 |
+| 2026-04-23 | 2.5 | ✅ 错误处理 i18n：api.js 硬编码中文→I18n.t()、新增 request_failed 等 key |
+
