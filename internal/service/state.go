@@ -23,6 +23,7 @@ import (
 type ComposeBoardState struct {
 	Version  int                          `json:"version"`
 	Services map[string]ServiceStateEntry `json:"services"`
+	Profiles map[string]ProfileStateEntry `json:"profiles"`
 }
 
 // ServiceStateEntry 单个服务上次已生效的状态
@@ -30,6 +31,13 @@ type ServiceStateEntry struct {
 	Image     string            `json:"image,omitempty"` // 已生效的展开镜像
 	Env       map[string]string `json:"env,omitempty"`   // 已生效的 env 变量值
 	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// ProfileStateEntry Profile 的配置启用态。
+// 注意：这里只表达“是否启用这个 profile 配置”，不表达下属服务是否全部运行。
+type ProfileStateEntry struct {
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 const (
@@ -61,8 +69,23 @@ func (s *StateManager) EnsureState() {
 
 	statePath := s.getStatePath()
 
-	// 已存在，直接返回
+	// 已存在：补齐缺失的 profile 配置态基线（升级场景）
 	if _, err := os.Stat(statePath); err == nil {
+		state, loadErr := s.loadStateLocked()
+		if loadErr != nil {
+			log.Printf("[STATE] 读取已存在状态文件失败，重新初始化: %v", loadErr)
+			state = s.buildCurrentState()
+			if err := s.writeStateLocked(state); err != nil {
+				log.Printf("[STATE] 重建状态文件失败: %v", err)
+			}
+			return
+		}
+
+		if s.ensureProfileEntriesLocked(state) {
+			if err := s.writeStateLocked(state); err != nil {
+				log.Printf("[STATE] 补齐 Profile 基线失败: %v", err)
+			}
+		}
 		return
 	}
 
@@ -102,15 +125,56 @@ func (s *StateManager) UpdateServiceState(serviceName string) {
 	log.Printf("[STATE] 已更新: %s", serviceName)
 }
 
-// GetPendingEnvChanges 返回每个服务受影响的未生效变更变量
-func (s *StateManager) GetPendingEnvChanges() map[string][]string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// IsProfileEnabled 返回 Profile 是否处于启用配置态。
+func (s *StateManager) IsProfileEnabled(profileName string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	state, err := s.loadStateLocked()
 	if err != nil {
+		state = s.buildCurrentState()
+	}
+	changed := s.ensureProfileEntriesLocked(state)
+	entry, ok := state.Profiles[profileName]
+	if changed {
+		if writeErr := s.writeStateLocked(state); writeErr != nil {
+			log.Printf("[STATE] 回写 Profile 基线失败: %v", writeErr)
+		}
+	}
+	return ok && entry.Enabled
+}
+
+// SetProfileEnabled 更新 Profile 配置启用态。
+func (s *StateManager) SetProfileEnabled(profileName string, enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, err := s.loadStateLocked()
+	if err != nil {
+		log.Printf("[STATE] 读取状态失败: %v", err)
+		state = s.buildCurrentState()
+	}
+	s.ensureProfileEntriesLocked(state)
+	state.Profiles[profileName] = ProfileStateEntry{
+		Enabled:   enabled,
+		UpdatedAt: time.Now(),
+	}
+	if err := s.writeStateLocked(state); err != nil {
+		log.Printf("[STATE] 更新 Profile %s 失败: %v", profileName, err)
+		return
+	}
+	log.Printf("[STATE] 已更新 Profile 配置态: %s = %t", profileName, enabled)
+}
+
+// GetPendingEnvChanges 返回每个服务受影响的未生效变更变量
+func (s *StateManager) GetPendingEnvChanges() map[string][]string {
+	s.mu.RLock()
+	state, err := s.loadStateLocked()
+	if err != nil {
+		s.mu.RUnlock()
 		return nil
 	}
+	s.mu.RUnlock()
 
 	currentEnv := s.manager.GetEnvVars()
 	project := s.manager.GetProject()
@@ -118,12 +182,20 @@ func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 		return nil
 	}
 
+	stateChanged := false
 	result := make(map[string][]string)
 
 	for _, decl := range project.Services {
 		applied, ok := state.Services[decl.Name]
 		if !ok {
-			continue
+			runtimeEntry, recovered := s.manager.BuildRuntimeStateEntry(decl.Name)
+			if recovered {
+				applied = runtimeEntry
+				state.Services[decl.Name] = runtimeEntry
+				stateChanged = true
+			} else {
+				continue
+			}
 		}
 
 		var affected []string
@@ -142,7 +214,13 @@ func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 	}
 
 	if len(result) == 0 {
+		if stateChanged {
+			s.persistRecoveredState(state)
+		}
 		return nil
+	}
+	if stateChanged {
+		s.persistRecoveredState(state)
 	}
 	return result
 }
@@ -158,6 +236,7 @@ func (s *StateManager) buildCurrentState() *ComposeBoardState {
 	state := &ComposeBoardState{
 		Version:  stateFileVersion,
 		Services: make(map[string]ServiceStateEntry),
+		Profiles: make(map[string]ProfileStateEntry),
 	}
 
 	project := s.manager.GetProject()
@@ -170,6 +249,8 @@ func (s *StateManager) buildCurrentState() *ComposeBoardState {
 	for _, decl := range project.Services {
 		state.Services[decl.Name] = s.buildServiceEntry(decl, envVars)
 	}
+
+	s.ensureProfileEntriesLocked(state)
 
 	return state
 }
@@ -218,6 +299,9 @@ func (s *StateManager) loadStateLocked() (*ComposeBoardState, error) {
 	if state.Services == nil {
 		state.Services = make(map[string]ServiceStateEntry)
 	}
+	if state.Profiles == nil {
+		state.Profiles = make(map[string]ProfileStateEntry)
+	}
 
 	return &state, nil
 }
@@ -226,6 +310,9 @@ func (s *StateManager) loadStateLocked() (*ComposeBoardState, error) {
 func (s *StateManager) writeStateLocked(state *ComposeBoardState) error {
 	if state.Services == nil {
 		state.Services = make(map[string]ServiceStateEntry)
+	}
+	if state.Profiles == nil {
+		state.Profiles = make(map[string]ProfileStateEntry)
 	}
 	state.Version = stateFileVersion
 
@@ -251,4 +338,68 @@ func (s *StateManager) writeStateLocked(state *ComposeBoardState) error {
 	}
 
 	return nil
+}
+
+func (s *StateManager) persistRecoveredState(state *ComposeBoardState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.writeStateLocked(state); err != nil {
+		log.Printf("[STATE] 回填缺失服务基线失败: %v", err)
+	}
+}
+
+// ensureProfileEntriesLocked 确保状态文件中的 Profile 配置态与当前 Compose 声明同步。
+// 缺失条目会根据“当前是否存在任一下属容器”推断初始 enabled，避免升级后所有 Profile 突然显示禁用。
+func (s *StateManager) ensureProfileEntriesLocked(state *ComposeBoardState) bool {
+	project := s.manager.GetProject()
+	if project == nil {
+		return false
+	}
+
+	if state.Profiles == nil {
+		state.Profiles = make(map[string]ProfileStateEntry)
+	}
+
+	changed := false
+	profileMap := project.GetProfiles()
+	validProfiles := make(map[string]struct{}, len(profileMap))
+
+	deployedServices := make(map[string]bool)
+	if s.manager != nil && s.manager.cache != nil {
+		containers := s.manager.cache.Get()
+		deployedServices = make(map[string]bool, len(containers))
+		for _, ctr := range containers {
+			deployedServices[ctr.ServiceName] = true
+		}
+	}
+
+	for profileName, serviceNames := range profileMap {
+		validProfiles[profileName] = struct{}{}
+		if _, ok := state.Profiles[profileName]; ok {
+			continue
+		}
+
+		enabled := false
+		for _, serviceName := range serviceNames {
+			if deployedServices[serviceName] {
+				enabled = true
+				break
+			}
+		}
+
+		state.Profiles[profileName] = ProfileStateEntry{
+			Enabled:   enabled,
+			UpdatedAt: time.Now(),
+		}
+		changed = true
+	}
+
+	for profileName := range state.Profiles {
+		if _, ok := validProfiles[profileName]; !ok {
+			delete(state.Profiles, profileName)
+			changed = true
+		}
+	}
+
+	return changed
 }

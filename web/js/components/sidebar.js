@@ -1,4 +1,8 @@
 /**
+ * ComposeBoard - Docker Compose 可视化管理面板
+ * 作者：凌封
+ * 网址：https://fengin.cn
+ *
  * 侧边栏导航组件 — 内联 SVG 图标
  */
 const AppSidebar = {

@@ -72,14 +72,15 @@
       "rebuild": "重建",
       "upgrade": "升级",
       "pull": "拉取镜像",
-      "view_env": "环境变量",
-      "view_logs": "查看日志",
+      "view_env": "ENV",
+      "view_logs": "LOG",
       "open_terminal": "终端"
     },
     "labels": {
       "local_build": "本地构建",
       "image_diff": "镜像有更新",
-      "env_changed": "配置已变更"
+      "env_changed": "配置已变更",
+      "startup_warning": "启动异常"
     },
     "category": {
       "base": "基础服务",
@@ -95,9 +96,7 @@
       "label": "可选服务",
       "enable_button": "启用",
       "disable_button": "停用",
-      "fix_button": "补齐启用",
       "status_enabled": "已启用",
-      "status_partial": "部分启用",
       "status_disabled": "未启用",
       "confirm_disable": "确定要停用 Profile「{name}」吗？以下服务将被停止并移除：",
       "enable_success": "Profile「{name}」启用成功",

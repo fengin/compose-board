@@ -565,7 +565,6 @@ h3 { font-size: 1.15rem; }
     font-weight: 600;
 }
 .profile-status.enabled { background: #ECFDF5; color: #065F46; }
-.profile-status.partial { background: #FFFBEB; color: #92400E; }
 .profile-status.disabled { background: #F3F4F6; color: #6B7280; }
 
 /* 本地构建角标 */
@@ -595,6 +594,19 @@ h3 { font-size: 1.15rem; }
 }
 .version-diff { background: #ECFDF5; color: #065F46; }
 .env-diff { background: #F5F3FF; color: #5B21B6; }
+.startup-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background: #FFF7ED;
+    color: #C2410C;
+    border: 1px solid #FDBA74;
+}
 
 /* 未部署行样式 */
 tr[data-status="not_deployed"] {

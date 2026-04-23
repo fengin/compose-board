@@ -98,28 +98,32 @@ Docker Compose 的 profiles 机制特点：
 - 一个服务是否“可选”，只由 `Profiles` 是否为空决定
 - UI 上必选服务继续按 `Category` 分组，可选服务单独按 profile 分组
 
-### 补充：未部署必选服务的启动策略
+### 补充：未部署服务的启动策略（2026-04-23 修订）
 
-Profiles 决策只约束“可选服务”的启用方式，不影响必选服务的恢复启动。
+Profiles 决策只约束“可选服务是否允许单独启动”，不再承担运行态聚合判定。
 
 统一策略：
-- 已部署且已停止的服务：`POST /api/services/:key/start` → Docker Start
-- 未部署且 `Profiles` 为空的必选服务：`POST /api/services/:key/start` → 等价执行 `docker compose up -d <service>`
-- 未部署且有 `Profiles` 的可选服务：仍通过 `POST /api/profiles/:name/enable` 启用整个 profile，不提供单服务 deploy API
+- 已部署且已停止的服务：`POST /api/services/:name/start` → Docker Start
+- 未部署且 `Profiles` 为空的必选服务：`POST /api/services/:name/start` → 等价执行 `docker compose up -d <service>`
+- 未部署且有 `Profiles` 的可选服务：
+  - 若所属 profile **未启用** → 返回 `services.start.profile_required`
+  - 若所属 profile **已启用** → 允许单服务 `start/up`
 
-### 补充：Profile 三态语义裁决（D-1）
+### 补充：Profile 配置态裁决（D-1，2026-04-23 重定稿）
 
-> **裁决时间**: 2026-04-21 | **状态**: 已确认
+> **裁决时间**: 2026-04-23 | **状态**: 已确认
 
-三态判定以**运行状态**为准（而非部署状态），因为用户关心的是"这组服务能不能用"：
+Profile 状态改为**配置启用态**，不再从服务运行状态反推，也不再存在 `partial` / `补齐启用`：
 
-| 状态 | 条件 | UI 操作 |
+| 状态 | 含义 | UI 操作 |
 |------|------|---------|
-| `enabled` | Profile 下**全部**服务处于 `running` | `[全部停用]` |
-| `partial` | 至少 1 个已部署，但未全部 running（含 stopped/exited） | `[补齐启用]` + `[全部停用]` |
-| `disabled` | Profile 下**全部**服务未部署 | `[启用]` |
+| `enabled` | 该 profile 当前配置为启用 | `[停用]` |
+| `disabled` | 该 profile 当前配置为停用 | `[启用]` |
 
-individual 服务的操作按钮基于各自 `Status` 独立渲染（running → 停止/重启，exited → 启动，not_deployed → 无按钮）。
+实现要求：
+- 服务端在 `.composeboard-state.json` 中持久化 `profiles.<name>.enabled`
+- `/api/profiles` 只返回配置态，不返回服务运行态聚合结果
+- Profile 下服务行的具体按钮与状态，统一按**单服务实际状态**渲染
 
 ### 停用 Profile 时的依赖检查
 
@@ -175,7 +179,7 @@ ImageSource string `json:"image_source"` // "registry" | "build" | "unknown"
 
 ### 补充：未部署 build 型服务的 start 行为
 
-`POST /api/services/:key/start` 对"未部署且无 profile 的必选服务"的默认语义是 `docker compose up -d <service>`。但对 `ImageSource == "build"` 的服务，该命令会触发本地构建，与"v1 只支持 image: 型"约束冲突。
+`POST /api/services/:name/start` 对"未部署且无 profile 的必选服务"的默认语义是 `docker compose up -d <service>`。但对 `ImageSource == "build"` 的服务，该命令会触发本地构建，与"v1 只支持 image: 型"约束冲突。
 
 **统一策略**：
 - `ImageSource == "build"` 且未部署 → API 返回 HTTP 409，错误码 `services.start.build_not_supported`，前端提示用户通过 CLI 自行构建。
@@ -372,24 +376,24 @@ func ExpandVars(template string, vars map[string]string) string
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/services` | 服务列表（声明 LEFT JOIN 容器） |
-| POST | `/api/services/:key/start` | 启动服务；对未部署且无 profile 的必选服务，等价 `docker compose up -d <service>` |
-| POST | `/api/services/:key/stop` | 停止服务 |
-| POST | `/api/services/:key/restart` | 重启服务 |
-| GET | `/api/services/:key/env` | 服务环境变量 |
-| GET | `/api/services/:key/status` | 服务实时状态 |
+| POST | `/api/services/:name/start` | 启动服务；对未部署且无 profile 的必选服务，等价 `docker compose up -d <service>` |
+| POST | `/api/services/:name/stop` | 停止服务 |
+| POST | `/api/services/:name/restart` | 重启服务 |
+| GET | `/api/services/:name/env` | 服务环境变量 |
+| GET | `/api/services/:name/status` | 服务实时状态 |
 
 ### 升级与重建（仅 image: 型）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/services/:key/pull` | 拉取镜像 |
-| GET | `/api/services/:key/pull` | 查询拉取状态 |
-| POST | `/api/services/:key/upgrade` | 应用升级 |
-| POST | `/api/services/:key/rebuild` | 重建容器 |
+| POST | `/api/services/:name/pull` | 拉取镜像 |
+| GET | `/api/services/:name/pull` | 查询拉取状态 |
+| POST | `/api/services/:name/upgrade` | 应用升级 |
+| POST | `/api/services/:name/rebuild` | 重建容器 |
 
 ### Profiles 管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/profiles` | 列出所有 profiles 及其服务和状态 |
+| GET | `/api/profiles` | 列出所有 profiles 的配置启用态 |
 | POST | `/api/profiles/:name/enable` | 启用整个 profile |
 | POST | `/api/profiles/:name/disable` | 停用整个 profile |
 
@@ -546,244 +550,227 @@ ws://host/api/deploy/<id>/stream?token=<jwt>
 
 ---
 
-## 12. 服务操作轮询机制（started_at 时间戳判定）
+## 12. 服务操作与 Profile 启停状态机（实时单服务轮询）
 
-> **日期**: 2026-04-22
-> **背景**: 从旧版 DeployBoard 迁移操作区 UX 设计，修复 loading 状态不一致问题
+> **日期**: 2026-04-23
+> **背景**: services.js 拆分后，列表缓存轮询与 Profile 聚合判定持续引发 loading/状态/按钮不一致问题，决定回到“单服务实时状态为唯一运行态真相源”的模型。
 
-### 问题
+### 目标
 
-服务操作（stop/start/restart/upgrade/rebuild）完成后，前端需要知道"操作是否已生效"。Docker Compose CLI 的 stop/start/restart 是同步命令（返回即完成），但 upgrade/rebuild 是异步的（后端 fire-and-forget）。
+1. 批量列表接口继续保留，用于页面基线展示和 15 秒自动刷新。
+2. 正在操作的服务，完成判定只能基于**单服务实时状态接口**。
+3. 每次实时状态查询都必须**同步回写缓存**，保证自动刷新不会把刚操作完的服务刷回旧状态。
+4. Profile 只表示“配置是否启用”，不再与服务运行态做聚合耦合。
 
-旧版存在两类 Bug：
-1. **stop/start/restart 没有 loading 态**：`await API` 阻塞期间操作区按钮可重复点击
-2. **upgrade/rebuild loading 被覆盖**：10 秒定时 `fetchServices` 会把 `_loading` 全部重置为 `false`
+### 真相源划分
 
-### 决策
-
-**所有 5 种操作统一走异步轮询模式**，共享一个 `startAsyncPoll()` 方法。
-
-#### 统一流程
-
-```
-用户点击确认 → await API（同步等待命令发出）
-  → 成功：关闭弹窗 → svc._loading = true → startAsyncPoll()
-  → 失败：弹窗内显示错误
-```
-
-#### 完成判定表（核心设计）
-
-| 操作 | 完成条件 | 说明 |
-|------|---------|------|
-| `stop` | `status === 'exited'` | 简单状态判定 |
-| `start` | `status === 'running'` | 简单状态判定 |
-| `restart` | `status === 'running' && started_at !== startedBefore` | **时间戳变化判定** |
-| `upgrade` | 同 restart + `!image_diff` | 时间戳 + 镜像差异消失 |
-| `rebuild` | 同 restart + `pending_env.length === 0` | 时间戳 + 环境变更清空 |
-
-> **为什么 restart 必须用 `started_at`**：
-> - `docker compose restart` 执行很快（2-3 秒），轮询间隔（3 秒）可能**完全错过"非 running"的瞬间**
-> - 单靠 `status === 'running'` 会在**第一次轮询就命中**（容器本来就在 running），立即误判为完成
-> - `started_at` 是 Docker 引擎写入的**权威时间戳**，容器重启后必定变化，不受轮询频率影响
-
-#### `_loading` 状态保护
-
-`fetchServices()` 全量刷新时保留正在操作中的 `_loading` 状态：
-
-```js
-const loadingSet = new Set(
-    this.services.filter(s => s._loading).map(s => s.name)
-);
-this.services = (services || []).map(s => ({
-    ...s, _loading: loadingSet.has(s.name)
-}));
-```
-
-#### 异常状态快速失败（C-3）
-
-upgrade/rebuild 过程中容器**必然短暂 exited**（旧容器停掉 → 新容器拉起）。为避免误判：
-
-- 仅当 `started_at === startedBefore`（容器还没开始重建）时才计入失败计数
-- 连续 3 次判定为异常才触发快速失败
-
-#### 轮询中实时更新
-
-每次轮询都用 `Object.assign()` 同步更新该服务的运行态数据（status/state/cpu/mem/image 等），让用户在 loading 期间也能看到实时变化。
-
-### 新旧版本差异
-
-| 维度 | 旧版 (DeployBoard) | 新版 (ComposeBoard) |
-|------|-------------------|-------------------|
-| 缓存对象 | 容器列表 `containers[]` | 服务列表 `services[]` |
-| 轮询 API | `getContainerStatus(id)` 单容器 | `getServices()` 全量 |
-| ID 变化处理 | 升级/重建后容器 ID 变，需 `byName` 回退 | 服务名不变，天然按 name 匹配 |
-| `started_at` 来源 | `ContainerStatus.started_at` | `ServiceView.started_at`（从 `ContainerInfo` 透传）|
-| 获取方式 | 操作前单独调 `getContainerStatus` | 直接从 `svc.started_at` 取（已在列表数据中）|
-
-### 数据流
-
-```
-Docker API
-  └─ /containers/{id}/json (inspect)
-      └─ State.StartedAt → ContainerInfo.StartedAt
-          └─ ServiceView.StartedAt (LEFT JOIN 透传)
-              └─ 前端 svc.started_at
-```
-
-`ListContainers` 中运行中容器复用已有的 `inspectContainer` 调用（用于 health check），零额外开销获取 `StartedAt`。非运行容器单独调 `getStartedAt`。
-
----
-
-## 13. Profile 状态变化设计（await API + 轮询校验 + 双源一致性）
-
-> **日期**: 2026-04-22（初版）→ 2026-04-22 修订（await 范式）
-> **背景**: Profile 启用/停用的 UX 对齐与时序竞态修复
-
-### 问题
-
-Profile 的 `enable` / `disable` 最初走 `await API + await fetchServices` 同步阻塞模式，存在三个与 §12 单服务操作不一致的行为：
-
-1. **弹窗阻塞**：点击"确认停用"后弹窗持续显示，直到 stop+rm 全部完成（5~10s）才关闭
-2. **下属服务无反馈**：用户只看到 Profile 头部 spinner，不知道哪个服务正在操作
-3. **定时刷新覆盖**：10s 定时 `fetchServices` 会重建 `this.profiles` 对象树，服务行 `_loading` 字段被新对象覆盖
-
-### 决策
-
-**Profile 操作采用"await API 完成 → 再轮询校验"的两阶段范式**，与 §12 单服务操作共享双源一致性和 `_loading` 保护基础。
-
-> **为什么不走 §12 的 fire-and-forget 模式**：详见本节末「#### 事故记录：为什么从 fire-and-forget 回退为 await」
-
-#### 统一流程
-
-```
-用户点击确认
-  → 立即关弹窗 + profileLoading=true + 批量下属服务 _loading=true + Toast "enabling/disabling"
-  → await API.enableProfile / disableProfile（backend 完成 Up/Stop+Rm 并 ForceRefresh cache）
-    │
-    ├─ 失败：清 loading + Toast.error + return
-    │
-    └─ 成功：startProfilePoll() 轮询 GET /api/profiles 校验目标态
-        → 命中：清 loading + Toast.success + fetchServices
-        → 超时（3 min）：清 loading + Toast.error
-        → enable 连续 3 次检测到 allCreated && hasUnhealthy：Toast.error "operation_failed"
-```
-
-#### 目标状态判定（双重判据）
-
-聚合态 `profile.status` 单独不够可靠，必须叠加"逐个服务状态一致"才算完成：
-
-| 操作 | 完成判据 | 说明 |
-|------|---------|------|
-| `enable` | `profile.status === 'enabled'` **且** 所有下属服务 `status === 'running'` | 排除聚合态已切换但个别服务仍在 restarting/starting 的瞬态 |
-| `disable` | `profile.status === 'disabled'` **且** 所有下属服务 `status === 'not_deployed'` | 排除 rm 命令返回但容器还没完全从 docker list 里消失的瞬态 |
-
-**enable 的失败快速判定**：`allCreated && hasUnhealthy`（所有服务都已创建 + 至少一个 restarting/exited）连续 3 次成立 → 判定启动失败，无需等 3 分钟超时。
-
-```js
-const allRunning = services.length > 0 && services.every(s => s.status === 'running');
-const allRemoved = services.length > 0 && services.every(s => s.status === 'not_deployed');
-const allCreated = services.length > 0 && services.every(s => s.status !== 'not_deployed');
-const hasUnhealthy = services.some(s => s.status === 'restarting' || s.status === 'exited');
-```
-
-`services.length > 0` 作为前置保护：极端情况下后端返回空 services，宁可等超时也不能误 finish。
-
-#### 双源 `_loading` 一致性
-
-Profile 下的服务**同时存在于** `this.services[]` 和 `this.profiles[name].services[]` 两棵树中。任何 _loading 或数据更新必须对两处同步，否则会出现"主列表已转圈但 Profile 行不转"或反之的状态撕裂。
-
-通过两个辅助方法集中处理：
-
-```js
-// 按服务名同步更新两个源里的字段
-updateServiceRefs(name, fields) {
-    const target = this.services.find(s => s.name === name);
-    if (target) Object.assign(target, fields);
-    for (const pname of Object.keys(this.profiles || {})) {
-        const t = (this.profiles[pname].services || []).find(s => s.name === name);
-        if (t) Object.assign(t, fields);
-    }
-}
-
-// 批量设置某 profile 下所有服务的 _loading
-setProfileServicesLoading(profileName, loading) {
-    for (const s of this.profiles[profileName].services) {
-        this.updateServiceRefs(s.name, { _loading: loading });
-    }
-}
-```
-
-`executeAction` / `startAsyncPoll` / `doEnableProfile` / `doDisableProfile` / `startProfilePoll` 全部统一走 `updateServiceRefs`，不再直接 `find + Object.assign` 主列表。
-
-#### `fetchServices` 的 _loading 保护扩展
-
-§12 的保护逻辑只覆盖 `this.services`，在 Profile 场景下需要扩展为双源扫描：
-
-```js
-const loadingNames = new Set();
-this.services.forEach(s => { if (s._loading) loadingNames.add(s.name); });
-for (const pname of Object.keys(this.profiles || {})) {
-    (this.profiles[pname].services || []).forEach(s => {
-        if (s._loading) loadingNames.add(s.name);
-    });
-}
-// 新 services + 新 profiles.services 均按 loadingNames 重建 _loading
-```
-
-#### 轮询参数
-
-| 参数 | 单服务 (§12) | Profile |
+| 数据 | 接口 | 用途 |
 |------|------|------|
-| 首次延迟 | 1s | **300ms** |
-| 轮询间隔 | 3s | 3s |
-| 超时 | 2 min（upgrade 5 min） | 3 min |
-| 轮询接口 | `GET /api/services` | `GET /api/profiles` |
-| API 调用方式 | fire-and-forget（§12 保留历史设计） | **await**（见下文事故记录） |
+| 服务列表基线 | `GET /api/services` | 页面初始渲染、15 秒自动刷新、CPU/内存全量补齐 |
+| 单服务实时状态 | `GET /api/services/:name/status` | 所有单服务操作的 loading 判定、实时行内更新 |
+| Profile 配置态 | `GET /api/profiles` | Profile 头部“启用 / 停用”按钮与状态展示 |
 
-Profile 首次延迟 300ms 是因为 `await API.enableProfile` 返回时 backend 已完成 `ForceRefresh cache`，无需再等 1s 对齐。Profile 超时 3 min 比单服务长，因为一次 `enable` 可能触发多个容器的串行 `up -d`（含镜像拉取）。`GET /api/profiles` 返回的 `ProfileInfo.Services` 已包含完整 `ServiceView`（运行态指标齐全），无需再并发调用 `/api/services`。
+### Profile 设计裁决
 
-#### 事故记录：为什么从 fire-and-forget 回退为 await
+- `Profile.status` 仅有 `enabled / disabled`
+- `enabled` 表示该 profile 当前配置为启用
+- `disabled` 表示该 profile 当前配置为停用
+- 服务端将其持久化到 `.composeboard-state.json > profiles`
+- 不再存在 `partial / 补齐启用`
 
-> **触发场景**：停用 Profile 完成后 1~3 秒内立即点启用，loading 状态瞬间消失，按钮恢复为"启用"，但 Toast 仍显示"正在启用中"——与用户预期的"loading 持续到启动完成"严重不符。
+### 后端接口契约
 
-**初版设计（fire-and-forget）**：
+#### 1. `GET /api/services/:name/status`
 
-```js
-// 旧版：立即开轮询，不等 API 完成
-async doEnableProfile(name) {
-    this.profileLoading[name] = true;
-    this.setProfileServicesLoading(name, true);
-    API.enableProfile(name).catch(e => { /* 清 loading */ });
-    this.startProfilePoll(name, 'enable');  // ← T=0 就开始轮询
-}
+返回值沿用 `ServiceView` 结构的关键字段：
+
+- `name`
+- `container_id`
+- `status`
+- `state`
+- `started_at`
+- `running_image`
+- `health`
+- `startup_warning`
+- `ports`
+- `cpu`
+- `mem_usage`
+- `mem_limit`
+- `mem_percent`
+- `image_diff`
+- `pending_env`
+
+接口行为：
+- 按 **service name** 直查 Docker，不走列表缓存
+- 查到实时状态后立即同步回写 `ContainerCache`
+- 若当前服务不存在容器，则同步把缓存中的该服务移除，列表层自然显示为 `not_deployed`
+
+#### 1.1 `startup_warning` 运行态告警
+
+`startup_warning` 是服务当前运行态的派生诊断结果，不参与 loading 完成判定，只用于列表告警展示。
+
+判定规则：
+
+- `running + health=unhealthy`
+  - 直接判 `startup_warning = true`
+- `created`
+  - 若 `当前时间 - 容器创建时间 >= 30s`
+  - 判 `startup_warning = true`
+- `restarting`
+  - 不直接使用累计 `RestartCount`，避免人工频繁重启时误报
+  - 改为解析 Docker `state` 文本中的持续时长（如 `Restarting (1) 40 seconds ago`）
+  - 若该持续时长 `>= 30s`
+  - 判 `startup_warning = true`
+- 其它状态
+  - 默认 `startup_warning = false`
+
+设计说明：
+
+- 该字段不是“某次操作失败记忆”，而是**当前服务是否处于异常运行态**的统一判断
+- 因此：
+  - `GET /api/services` 的 15 秒自动刷新会带出该值
+  - `GET /api/services/:name/status` 的单服务轮询也会带出该值
+- 前端只显示通用告警“启动异常”，不在 v1 解释具体失败原因
+
+#### 2. `GET /api/profiles`
+
+仅返回配置启用态：
+
+```json
+[
+  { "name": "monitoring", "status": "enabled", "enabled": true },
+  { "name": "debug", "status": "disabled", "enabled": false }
+]
 ```
 
-**根因**：`GET /api/profiles` 是只读、非阻塞的。当 backend 的 `executor.Up` 还在执行中间阶段（容器刚创建还没 running、或 `cache.ForceRefresh` 还没触发），轮询读到的是**上一次 disable 完成的残留快照**或**启动中间瞬态**。旧版判据过于宽松——仅 `freshProfile.status === 'enabled'` 就 finish——只要 Docker daemon 在某一瞬间让所有容器都处于 running（哪怕下一秒就会因为健康检查失败而 exit），轮询就误判完成，清 loading 还原按钮。紧接着下一次 `fetchServices` 把 status 拉回 `partial`，用户看到的就是"loading 闪一下就消失、按钮回到启用"。
+#### 3. `POST /api/profiles/:name/enable|disable`
 
-**修复方案（await + 双重判据 + 失败抗抖）**：
+- `enable`：执行整组 `up`
+- `disable`：执行整组 `stop + rm`
+- API 成功后立即写入 profile 配置态
+- 服务是否真的全部起来，由前端继续对组内服务逐个轮询 `GET /api/services/:name/status`
 
-1. **`await API.enableProfile / disableProfile`**：确保 backend 的 `Up/Stop+Rm` 命令 **和** 随后的 `cache.ForceRefresh` 都已完成，再开始轮询。彻底消除"轮询早于 backend 写入 cache"的时序窗口。
-2. **双重判据**：`profile.status` 聚合态必须匹配，**且** 所有下属服务逐个满足目标单态（`running` / `not_deployed`）。排除聚合瞬态误命中。
-3. **失败抗抖**：enable 场景下 `allCreated && hasUnhealthy` 连续 3 次才算失败，避免启动过程中短暂的 `restarting` 被误判。
-4. **首次延迟 300ms**：await 已对齐 backend 状态，无需再等 1s。
+### 单服务操作规则
 
-**吸取的教训**：
+适用于固定服务与 Profile 下服务，统一处理：
 
-- 异步轮询的"完成判据"必须覆盖**聚合态 + 个体态**，单看其中之一都会被中间瞬态欺骗
-- `fire-and-forget + 轮询`适合那种**可观测性强、无中间瞬态**的操作（单服务 start/stop 的 `started_at` 变化就是不可逆锚点）；多容器串行编排的操作中间瞬态复杂，必须 await 锚定 cache 写入时点
-- 设计对称不等于代码对称。§12 和 §13 共享 UX 模式、双源保护、轮询框架，但 API 调用时机因后端契约不同而有差异，这是合理的"具体问题具体分析"
+- `start`
+- `stop`
+- `restart`
+- `upgrade`
+- `rebuild`
 
-### 与 §12 的关系
+#### 流程
 
-§13 不替换 §12，而是**以 §12 为基础扩展到群组场景**：
+```text
+用户确认操作
+  → 行内进入 loading
+  → 调用对应 POST API
+  → 启动 3s/次轮询：GET /api/services/:name/status
+    → 用返回结果即时更新这一行显示
+    → 用同一份结果判断是否完成
+```
 
-| 维度 | §12 单服务操作 | §13 Profile 操作 |
-|------|------|------|
-| 操作发起点 | 主列表服务行 or Profile 服务行 | Profile 分组头部 |
-| Loading 粒度 | 单服务 `svc._loading` | Profile 头部 `profileLoading[name]` + 批量 `svc._loading` |
-| API 调用方式 | fire-and-forget | **await**（锚定 backend cache 刷新时点） |
-| 目标状态 | `started_at` 变化或 `status` 切换 | `profile.status` 聚合态 + 全部下属服务个体态 |
-| 失败抗抖 | 单服务 status 异常即可判定 | enable 需 `allCreated && hasUnhealthy` 连续 3 次 |
-| 数据同步函数 | `updateServiceRefs`（双源） | `updateServiceRefs` + `setProfileServicesLoading` |
-| 共享基础 | `fetchServices` 双源 _loading 保护、轮询节奏、Toast 反馈风格 | 完全复用 |
+#### 完成判据
 
+| 操作 | 完成条件 |
+|------|----------|
+| `stop` | `status === 'exited'` 或 `status === 'not_deployed'` |
+| `start` | `status === 'running'` |
+| `restart` | `status === 'running'` 且 `started_at` 或 `container_id` 相比操作前已变化 |
+| `upgrade` | 同 `restart`，且 `image_diff === false` |
+| `rebuild` | 同 `restart`，且 `pending_env.length === 0` |
+
+> `started_at` 是主判据；`container_id` 作为重建/升级时的补充锚点，避免容器替换后只看 `running` 误判成功。
+
+#### 失败收敛
+
+- `start`
+  - 连续 3 次拿到 `exited / restarting`
+  - 且还没有出现新的 `started_at / container_id`
+  - 判定启动失败，清 loading
+- `restart / upgrade / rebuild`
+  - 一旦出现新的 `started_at / container_id`
+  - 后续连续 3 次仍为 `exited / restarting`
+  - 判定本次新实例启动失败，清 loading
+- 统一超时：
+  - 普通操作 2 分钟
+  - `upgrade` 5 分钟
+
+#### 服务行按钮显示矩阵
+
+> 原则：`loading` 优先级最高。只要该行处于 loading，中间状态只显示 spinner，不显示按钮；loading 结束后再按下面矩阵渲染。
+
+| 当前状态 | 显示按钮 |
+|------|----------|
+| `running` | `重启`、`停止`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建` |
+| `exited` | `启动`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建` |
+| `created` | `启动`、`重启`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建` |
+| `restarting` | `重启`、`停止`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建` |
+| `not_deployed` | 固定服务显示 `启动`；已启用 Profile 下的可选服务显示 `启动`；未启用 Profile 下的可选服务不显示单服务启动按钮 |
+
+设计说明：
+
+- `startup_warning` 只影响状态列告警展示，不参与按钮隐藏
+- `created / restarting` 视为“已部署但异常”的运行态，需继续暴露恢复与排查入口
+- `created` 不显示 `停止`：该状态下容器本就未进入运行态，Docker `stop` 不会把它转换成 `exited`，继续显示 `停止` 只会制造“操作无效”的误解
+- `查看日志` 对所有 `status != not_deployed` 的服务都应可见，便于排查异常
+- `升级 / 重建` 继续只由 `image_diff / pending_env` 决定，不额外受异常态抑制
+
+### Profile 启用 / 停用规则
+
+Profile 本身不再拥有独立的运行态判据，组内操作也统一回到“逐服务轮询”：
+
+#### `enable`
+
+```text
+点击启用
+  → 头部 loading + 组内服务行 loading
+  → await POST /api/profiles/:name/enable
+  → 本地切换 profile.status = enabled
+  → 轮询组内每个服务的 GET /api/services/:name/status
+  → 全部 running 才结束 loading
+```
+
+#### `disable`
+
+```text
+点击停用
+  → 头部 loading + 组内服务行 loading
+  → await POST /api/profiles/:name/disable
+  → 本地切换 profile.status = disabled
+  → 轮询组内每个服务的 GET /api/services/:name/status
+  → 全部 not_deployed 才结束 loading
+```
+
+#### 关键原则
+
+- Profile 头部状态来自 `/api/profiles`
+- 服务行状态来自 `/api/services` / `/api/services/:name/status`
+- Profile 的 loading 完成判定只看**组内所有服务的目标状态是否达成**
+- 不再引入 `partial / 补齐启用` 这种运行态聚合中间态
+
+### 自动刷新与操作轮询的职责边界
+
+- `15s` 自动刷新保留，只做页面基线刷新
+- 正在操作的服务，其 loading 结束与否**完全不依赖**自动刷新
+- 自动刷新拿到的数据若比实时轮询旧，也不会影响正在操作服务的完成判定
+- 因为实时接口每次都会回写缓存，所以自动刷新最终会和实时轮询收敛到同一状态
+- `startup_warning` 由列表基线与实时接口统一派生，因此既能覆盖当前操作中的异常态，也能在重新打开页面时继续反映当前不正常服务
+
+### 代码边界
+
+- `service/manager.go`
+  - `ListServices()`：批量列表
+  - `GetRealtimeServiceStatus()`：单服务实时状态 + 缓存回写
+- `docker/cache.go`
+  - `SyncService()` / `RemoveService()`：服务级缓存同步
+- `service/profiles.go`
+  - 管理 Profile 配置态，不再聚合运行态
+- `web/js/pages/services.js`
+  - 页面编排
+  - 单服务 / Profile 轮询状态机
+- `web/js/pages/services-rules.js`
+  - 按钮规则与完成判据
+- `web/js/pages/services-ops.js`
+  - 排序、Profile 配置态映射、loading 判定

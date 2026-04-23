@@ -196,7 +196,7 @@ func (m *ServiceManager) ListServices() ([]ServiceView, error)
 
 **核心函数**：
 ```go
-func (p *ProfileManager) ListProfiles() map[string]ProfileInfo
+func (p *ProfileManager) ListProfiles() []ProfileInfo
 func (p *ProfileManager) EnableProfile(name string) error
 func (p *ProfileManager) DisableProfile(name string) error
 ```
@@ -204,33 +204,36 @@ func (p *ProfileManager) DisableProfile(name string) error
 **ProfileInfo**：
 ```go
 type ProfileInfo struct {
-    Name     string        `json:"name"`
-    Services []ServiceView `json:"services"`  // 该 profile 下的服务
-    Status   string        `json:"status"`    // "enabled" | "partial" | "disabled"
+    Name    string `json:"name"`
+    Status  string `json:"status"`   // "enabled" | "disabled"
+    Enabled bool   `json:"enabled"`
 }
 ```
 
 **状态语义**：
-- `enabled`：profile 下**全部**服务处于 running
-- `partial`：profile 下**部分**服务已部署/运行，其余未部署或已退出
-- `disabled`：profile 下**全部**服务未部署
+- `enabled`：该 profile 在配置层已启用
+- `disabled`：该 profile 在配置层未启用
+- 不再从服务运行状态反推 `partial`
 
 **交互**：
-- EnableProfile → `executor.Up(nil, UpOptions{Profiles: []string{name}})`
-- DisableProfile → 获取 profile 下的服务 keys → `executor.Stop(keys)` → `executor.Rm(keys, true)`
-- 前端在 `partial` 态下同时展示 `[补齐启用]` 和 `[全部停用]` 两个按钮
+- EnableProfile → `executor.Up(nil, UpOptions{Profiles: []string{name}})` → `state.SetProfileEnabled(name, true)`
+- DisableProfile → 获取 profile 下的服务 keys → `executor.Stop(keys)` → `executor.Rm(keys, true)` → `state.SetProfileEnabled(name, false)`
+- Profile 头部状态只反映配置是否启用；服务运行态由 `/api/services` / `/api/services/:name/status` 单独呈现
 
 ---
 
 ### 1.10 API 层重构
 
 - `api/handler.go`：持有 ServiceManager / UpgradeManager / ProfileManager
-- `api/services.go`：`GET /api/services` + 启停重启
-  - `POST /api/services/:key/start`：
+- `api/services.go`：`GET /api/services` + 单服务实时状态 + 启停重启
+  - `POST /api/services/:name/start`：
     - 已部署且已停止 → Docker Start
     - 未部署且无 profile 的必选服务 → `executor.Up([]string{key}, UpOptions{})`
+    - 已启用 profile 下的未部署可选服务 → `executor.Up([]string{key}, UpOptions{Profiles: decl.Profiles})`
+- `GET /api/services/:name/status`：直查 Docker 当前服务状态，并同步回写服务缓存
 - `api/upgrade.go`：精简版（逻辑在 service 层）
 - `api/profiles.go`：Profiles API（新增）
+  - `GET /api/profiles`：返回 profile 配置启用态
 - 更新 `main.go` 路由
 
 ---
@@ -370,8 +373,10 @@ type ProfileInfo struct {
 | 未部署必选服务可启动 | 删除某个必选服务容器后，点击启动 → 等价 `up -d <service>` |
 | build 型服务标注 `[本地构建]` | 不显示升级按钮；未部署时点击启动返回 409 `services.start.build_not_supported` |
 | 分类由 label 驱动 | 未打 `com.composeboard.category` 标签的服务全部归入 `other`，不出现基于服务名的分类 |
-| Profile 三态展示 | fdfs 全未部署显示 `disabled`；只启动 tracker 显示 `partial`；全部启动显示 `enabled` |
-| Profile 整组启用/停用 | fdfs → 两个服务同时启动/停止 |
+| Profile 两态展示 | fdfs 默认显示 `disabled`；启用后显示 `enabled`；不再出现 `partial` |
+| Profile 整组启用/停用 | fdfs → 点击启用后两服务都进入启动轮询；点击停用后两服务都进入停止轮询 |
+| 单服务实时状态接口 | 操作中的服务通过 `/api/services/:name/status` 更新行内状态与 loading 判定，不依赖全量列表缓存 |
+| 已启用 Profile 的单服务操作 | 启用 Profile 后，组内服务与固定服务使用同一套单服务按钮和 loading 规则 |
 | 镜像差异检测不依赖 *_VERSION | 修改任意变量名后仍可检测 |
 | 状态文件基线 | 首启无 `.composeboard-state.json` 时不产生配置漂移告警；从旧 `.deployboard-state.json` 迁移无误报 |
 | 向后兼容 zheshang 项目 | 23 个服务全部可见；base/backend/frontend/init 四组服务按 label 正确分组；3 个 profile（fdfs/rule/xiaoxin）状态识别正确；`${HOST_IP}`、`${*_VERSION}` 展开与旧版一致；镜像差异检测命中 ≥1 个服务即通过 |

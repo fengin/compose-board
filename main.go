@@ -108,12 +108,13 @@ func main() {
 
 	// 延迟注入 stateM 到 manager（解决循环依赖：manager ↔ stateM）
 	manager.SetStateManager(stateM)
+	manager.SetDockerClient(dockerCli)
 
 	// 升级管理器
 	upgradeM := service.NewUpgradeManager(manager, cache, executor, stateM)
 
 	// Profile 管理器
-	profileM := service.NewProfileManager(manager, cache, executor)
+	profileM := service.NewProfileManager(manager, cache, executor, stateM)
 
 	// 生命周期管理器（启停重启业务逻辑）
 	lifecycleM := service.NewLifecycleManager(manager, cache, dockerCli, executor)
@@ -153,6 +154,7 @@ func main() {
 
 		// 服务管理
 		authorized.GET("/services", handler.ListServices)
+		authorized.GET("/services/:name/status", handler.GetServiceStatus)
 		authorized.POST("/services/:name/start", handler.StartService)
 		authorized.POST("/services/:name/stop", handler.StopService)
 		authorized.POST("/services/:name/restart", handler.RestartService)

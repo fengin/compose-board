@@ -2,13 +2,14 @@
 // 作者：凌封
 // 网址：https://fengin.cn
 
-// profiles.go 管理 Compose Profiles 的三态（enabled/partial/disabled）。
-// Profile 信息来自声明态（parser），运行态来自 docker cache。
+// profiles.go 管理 Compose Profiles 的配置启用态。
+// 注意：Profile 状态只表达“配置是否启用”，不再表达下属服务是否全部运行。
 package service
 
 import (
 	"context"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/fengin/composeboard/internal/compose"
@@ -17,9 +18,9 @@ import (
 
 // ProfileInfo Profile 信息
 type ProfileInfo struct {
-	Name     string        `json:"name"`
-	Services []ServiceView `json:"services"` // 该 profile 下的服务视图
-	Status   string        `json:"status"`   // "enabled" | "partial" | "disabled"
+	Name    string `json:"name"`
+	Status  string `json:"status"`  // "enabled" | "disabled"
+	Enabled bool   `json:"enabled"` // 便于前端直接判断
 }
 
 // ProfileManager Profile 管理器
@@ -27,70 +28,54 @@ type ProfileManager struct {
 	manager  *ServiceManager
 	cache    *docker.ContainerCache
 	executor *compose.Executor
+	stateM   *StateManager
 }
 
 // NewProfileManager 创建 Profile 管理器
-func NewProfileManager(manager *ServiceManager, cache *docker.ContainerCache, executor *compose.Executor) *ProfileManager {
+func NewProfileManager(manager *ServiceManager, cache *docker.ContainerCache, executor *compose.Executor, stateM *StateManager) *ProfileManager {
 	return &ProfileManager{
 		manager:  manager,
 		cache:    cache,
 		executor: executor,
+		stateM:   stateM,
 	}
 }
 
-// ListProfiles 返回所有 Profiles 及其状态
-func (p *ProfileManager) ListProfiles() map[string]*ProfileInfo {
+// ListProfiles 返回所有 Profiles 的配置启用态。
+func (p *ProfileManager) ListProfiles() []ProfileInfo {
 	project := p.manager.GetProject()
 	if project == nil {
 		return nil
 	}
 
-	// 获取 profile → 服务名 映射
 	profileMap := project.GetProfiles()
 	if len(profileMap) == 0 {
 		return nil
 	}
 
-	// 获取当前服务视图（含运行态）
-	allServices := p.manager.ListServices()
-	serviceViewMap := make(map[string]*ServiceView)
-	for i := range allServices {
-		serviceViewMap[allServices[i].Name] = &allServices[i]
+	names := make([]string, 0, len(profileMap))
+	for profileName := range profileMap {
+		names = append(names, profileName)
 	}
+	sort.Strings(names)
 
-	result := make(map[string]*ProfileInfo)
-
-	for profileName, serviceNames := range profileMap {
-		info := &ProfileInfo{
+	result := make([]ProfileInfo, 0, len(names))
+	for _, profileName := range names {
+		enabled := false
+		if p.stateM != nil {
+			enabled = p.stateM.IsProfileEnabled(profileName)
+		}
+		info := ProfileInfo{
 			Name: profileName,
-		}
-
-		runningCount := 0
-		deployedCount := 0
-
-		for _, svcName := range serviceNames {
-			if sv, ok := serviceViewMap[svcName]; ok {
-				info.Services = append(info.Services, *sv)
-				if sv.Status == "running" {
-					runningCount++
-					deployedCount++
-				} else if sv.Status != "not_deployed" {
-					deployedCount++
+			Status: func() string {
+				if enabled {
+					return "enabled"
 				}
-			}
+				return "disabled"
+			}(),
+			Enabled: enabled,
 		}
-
-		// 三态判定
-		total := len(serviceNames)
-		if runningCount == total {
-			info.Status = "enabled"
-		} else if deployedCount > 0 {
-			info.Status = "partial"
-		} else {
-			info.Status = "disabled"
-		}
-
-		result[profileName] = info
+		result = append(result, info)
 	}
 
 	return result
@@ -112,6 +97,9 @@ func (p *ProfileManager) EnableProfile(name string) error {
 	}
 
 	p.cache.RefreshNow(false)
+	if p.stateM != nil {
+		p.stateM.SetProfileEnabled(name, true)
+	}
 	log.Printf("[PROFILE] 启用完成: %s", name)
 	return nil
 }
@@ -150,6 +138,9 @@ func (p *ProfileManager) DisableProfile(name string) error {
 	}
 
 	p.cache.RefreshNow(false)
+	if p.stateM != nil {
+		p.stateM.SetProfileEnabled(name, false)
+	}
 	log.Printf("[PROFILE] 停用完成: %s", name)
 	return nil
 }

@@ -25,7 +25,7 @@ type ContainerCache struct {
 	lastUpdate time.Time
 	updating   bool
 
-	// 状态覆写：解决 refresh 整体替换 slice 导致增量更新丢失的竞态
+	// 按服务名保存最新覆写：解决 refresh 整体替换 slice 导致增量更新丢失的竞态
 	overrideMu sync.Mutex
 	overrides  map[string]statusOverride
 
@@ -34,12 +34,11 @@ type ContainerCache struct {
 	wakeCh     chan struct{}
 }
 
-// statusOverride 单容器状态覆写记录
+// statusOverride 单服务状态覆写记录
 type statusOverride struct {
-	status      string
-	state       string
-	image       string // 升级场景：新镜像
-	serviceName string // 升级/重建场景：用于 ID 变更时的回退匹配
+	serviceName string
+	info        ContainerInfo
+	removed     bool
 	at          time.Time
 }
 
@@ -106,67 +105,117 @@ func (cc *ContainerCache) RefreshNow(withStats bool) {
 	cc.refresh(withStats)
 }
 
-// UpdateContainerStatus 更新缓存中单个容器的状态（轮询时同步写回）
-// serviceName 非空时，若按 ID 找不到则回退为按 ServiceName 匹配（升级/重建后 ID 变化场景）
-// image 非空时同步更新缓存中的 Image 字段
-func (cc *ContainerCache) UpdateContainerStatus(containerID, serviceName, status, state, image string) {
-	// 1. 立即更新当前 slice（供即时读取）
+// SyncService 用单服务实时状态同步缓存。
+// 该方法既更新当前内存 slice，也登记 override，确保正在进行的 refresh 不会把新状态回刷掉。
+func (cc *ContainerCache) SyncService(info ContainerInfo) {
+	if info.ServiceName == "" {
+		return
+	}
+	if info.Status != "running" {
+		info.CPU = 0
+		info.MemUsage = 0
+		info.MemLimit = 0
+		info.MemPercent = 0
+	}
+
 	cc.mu.Lock()
-	found := false
-	var oldID string
+	replaced := false
 	for i := range cc.containers {
-		if cc.containers[i].ID == containerID {
-			found = true
-			cc.containers[i].Status = status
-			cc.containers[i].State = state
-			if image != "" {
-				cc.containers[i].Image = image
-			}
-			if status != "running" {
-				cc.containers[i].CPU = 0
-				cc.containers[i].MemUsage = 0
-				cc.containers[i].MemPercent = 0
-			}
+		if cc.containers[i].ServiceName == info.ServiceName {
+			cc.containers[i] = info
+			replaced = true
 			break
 		}
 	}
-	// ID 未匹配到（升级/重建后容器 ID 已变），回退按 ServiceName 查找
-	if !found && serviceName != "" {
-		for i := range cc.containers {
-			if cc.containers[i].ServiceName == serviceName {
-				oldID = cc.containers[i].ID // 记录旧 ID 用于清理 overrides
-				log.Printf("[CACHE] 容器 ID 变更: %s → %s (服务: %s)", oldID, containerID, serviceName)
-				cc.containers[i].ID = containerID // 同步新 ID
-				cc.containers[i].Status = status
-				cc.containers[i].State = state
-				if image != "" {
-					cc.containers[i].Image = image
-				}
-				if status != "running" {
-					cc.containers[i].CPU = 0
-					cc.containers[i].MemUsage = 0
-					cc.containers[i].MemPercent = 0
-				}
-				break
-			}
-		}
+	if !replaced {
+		cc.containers = append(cc.containers, info)
 	}
+	cc.lastUpdate = time.Now()
 	cc.mu.Unlock()
 
-	// 2. 写入 override（防止 refresh 整体替换时丢失）
 	cc.overrideMu.Lock()
-	cc.overrides[containerID] = statusOverride{
-		status:      status,
-		state:       state,
-		image:       image,
-		serviceName: serviceName,
+	cc.overrides[info.ServiceName] = statusOverride{
+		serviceName: info.ServiceName,
+		info:        info,
+		removed:     false,
 		at:          time.Now(),
 	}
-	// 清理旧 ID 的 override 条目（容器已不存在）
-	if oldID != "" {
-		delete(cc.overrides, oldID)
+	cc.overrideMu.Unlock()
+}
+
+// RemoveService 将服务从缓存中移除，并登记 override，防止旧 refresh 把已删除的容器重新写回缓存。
+func (cc *ContainerCache) RemoveService(serviceName string) {
+	if serviceName == "" {
+		return
+	}
+
+	cc.mu.Lock()
+	filtered := cc.containers[:0]
+	for _, ctr := range cc.containers {
+		if ctr.ServiceName != serviceName {
+			filtered = append(filtered, ctr)
+		}
+	}
+	cc.containers = filtered
+	cc.lastUpdate = time.Now()
+	cc.mu.Unlock()
+
+	cc.overrideMu.Lock()
+	cc.overrides[serviceName] = statusOverride{
+		serviceName: serviceName,
+		removed:     true,
+		at:          time.Now(),
 	}
 	cc.overrideMu.Unlock()
+}
+
+// UpdateContainerStatus 保留给轻量生命周期操作使用。
+// 新逻辑统一转换成按服务维度同步缓存，兼容旧调用点。
+func (cc *ContainerCache) UpdateContainerStatus(containerID, serviceName, status, state, image string) {
+	if serviceName == "" {
+		return
+	}
+
+	cc.mu.RLock()
+	var base *ContainerInfo
+	for i := range cc.containers {
+		if cc.containers[i].ServiceName == serviceName {
+			clone := cc.containers[i]
+			base = &clone
+			break
+		}
+	}
+	cc.mu.RUnlock()
+
+	if status == "not_deployed" {
+		cc.RemoveService(serviceName)
+		return
+	}
+
+	info := ContainerInfo{
+		ID:          containerID,
+		ServiceName: serviceName,
+		Status:      status,
+		State:       state,
+		Image:       image,
+	}
+	if base != nil {
+		info = *base
+		if containerID != "" {
+			info.ID = containerID
+		}
+		if state != "" {
+			info.State = state
+		}
+		if status != "" {
+			info.Status = status
+		}
+		if image != "" {
+			info.Image = image
+		}
+	}
+
+	cc.SyncService(info)
 }
 
 // backgroundLoop 后台刷新主循环
@@ -242,33 +291,14 @@ func (cc *ContainerCache) refresh(withStats bool) {
 		cc.fetchStatsParallel(ctx, containers)
 	}
 
-	// 合并 overrides：将 refresh 期间产生的状态覆写应用到新 slice
+	// 合并 overrides：将 refresh 期间产生的服务级覆写应用到新 slice
 	cc.overrideMu.Lock()
-	for id, ov := range cc.overrides {
+	for serviceName, ov := range cc.overrides {
 		if ov.at.After(refreshStart) {
-			// 此 override 比本次 refresh 的 Docker 查询更新，以 override 为准
-			matched := false
-			// 先按 ID 匹配
-			for i := range containers {
-				if containers[i].ID == id {
-					cc.applyOverride(&containers[i], ov)
-					matched = true
-					break
-				}
-			}
-			// ID 未匹配（升级/重建后容器 ID 已变），回退按 ServiceName
-			if !matched && ov.serviceName != "" {
-				for i := range containers {
-					if containers[i].ServiceName == ov.serviceName {
-						containers[i].ID = id // 同步新 ID
-						cc.applyOverride(&containers[i], ov)
-						break
-					}
-				}
-			}
+			containers = cc.applyOverride(containers, ov)
 		} else {
 			// 此 override 比本次 refresh 早，Docker 查询的数据更新，清除
-			delete(cc.overrides, id)
+			delete(cc.overrides, serviceName)
 		}
 	}
 	cc.overrideMu.Unlock()
@@ -283,18 +313,18 @@ func (cc *ContainerCache) refresh(withStats bool) {
 	}
 }
 
-// applyOverride 将覆写数据应用到容器条目
-func (cc *ContainerCache) applyOverride(ctr *ContainerInfo, ov statusOverride) {
-	ctr.Status = ov.status
-	ctr.State = ov.state
-	if ov.image != "" {
-		ctr.Image = ov.image
+// applyOverride 将服务级覆写应用到容器列表。
+func (cc *ContainerCache) applyOverride(containers []ContainerInfo, ov statusOverride) []ContainerInfo {
+	filtered := containers[:0]
+	for _, ctr := range containers {
+		if ctr.ServiceName != ov.serviceName {
+			filtered = append(filtered, ctr)
+		}
 	}
-	if ov.status != "running" {
-		ctr.CPU = 0
-		ctr.MemUsage = 0
-		ctr.MemPercent = 0
+	if ov.removed {
+		return filtered
 	}
+	return append(filtered, ov.info)
 }
 
 // fetchStatsParallel 并发采集所有容器的资源使用数据

@@ -93,6 +93,7 @@ const API = {
 
     // === 服务管理（按服务名操作） ===
     getServices() { return this.get('/api/services'); },
+    getServiceStatus(name) { return this.get(`/api/services/${name}/status`); },
     startService(name) { return this.post(`/api/services/${name}/start`); },
     stopService(name) { return this.post(`/api/services/${name}/stop`); },
     restartService(name) { return this.post(`/api/services/${name}/restart`); },

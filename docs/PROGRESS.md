@@ -108,7 +108,7 @@
 
 ### 1.9 service/profiles.go — Profiles 管理
 - [x] 完成
-- ✅ ListProfiles 三态判定（enabled / partial / disabled）
+- ✅ ListProfiles 改为配置启用态（enabled / disabled）
 - ✅ EnableProfile: `compose up --profile xxx`
 - ✅ DisableProfile: `stop` + `rm -f`
 
@@ -146,7 +146,7 @@
   - 同步操作（start/stop/restart）立即刷新
   - 异步操作（upgrade/rebuild）2s 轮询 + 5min 超时 + 失败快反（T-2）
   - poll 闭包身份校验防污染（T-7）
-  - 10s 定时刷新（T-1）
+  - 15s 定时刷新（T-1）
   - extractVersion 纯函数抽取（R-5）
 - ✅ dashboard.js：项目信息卡片 + 服务三态统计
 - ✅ logs.js：WebSocket→SSE(EventSource) + 401 处理 + 连续错误≥ 3 次自动断开（T-6）
@@ -211,9 +211,13 @@
 - ✅ 新增 i18n key：`common.request_failed`、`logs.reconnect_*` 系列
 
 ### 2.6 services.js 组件拆分
-- [ ] 未开始
-- ℹ️ 拆分为 ServiceTable / UpgradeModal / ConfirmDialog
-- ℹ️ 顺手清理：T-3 extractVersion 私有 registry 误识别、T-4 profileLoading 泄漏
+- [x] 完成
+- ✅ 组件拆分：ServiceTable / UpgradeModal / ConfirmDialog
+- ✅ 页内收口：新增 `services-rules.js` 与 `services-ops.js`，规则层与操作态辅助层分离
+- ✅ 顺手清理：T-3 extractVersion 私有 registry 误识别、T-4 profileLoading 泄漏
+- ✅ 状态机重构：服务操作 loading 判定统一改为单服务实时轮询 `/api/services/:name/status`
+- ✅ Profile 语义收口：三态改为配置启用态 `enabled / disabled`，移除 `partial / 补齐启用`
+- ✅ 缓存一致性：单服务实时查询同步回写服务缓存，避免 15s 列表刷新把操作中服务刷回旧状态
 
 ---
 
@@ -236,4 +240,7 @@
 | 2026-04-23 | 2.2 | ✅ SSE 日志增强：前端断线自动重连 + 后端三层 Bug 修复（since 格式/exited 门控/容器 ID 变更） |
 | 2026-04-23 | 2.3 | ✅ .env 编辑器优化：WriteEnvEntries 用 Raw 保留引号、前端按需重建 |
 | 2026-04-23 | 2.5 | ✅ 错误处理 i18n：api.js 硬编码中文→I18n.t()、新增 request_failed 等 key |
-
+| 2026-04-23 | 2.6 | ✅ 服务页组件拆分收尾：ServiceTable / UpgradeModal / ConfirmDialog 落地，页内规则层与操作态辅助层分离 |
+| 2026-04-23 | 2.6-state-machine | ✅ 服务页状态机重构：单服务实时轮询、服务缓存回写、Profile 配置启用态、移除 partial / 补齐启用 |
+| 2026-04-23 | 2.6-warning | ✅ 服务运行态告警：新增 `startup_warning`，统一标记 unhealthy / created 超时 / restarting 超时 的异常服务 |
+| 2026-04-23 | 2.6-actions | ✅ 服务行按钮矩阵收口：created / restarting 异常态放开日志、重启、停止、升级、重建等恢复入口 |

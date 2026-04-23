@@ -85,6 +85,9 @@ const router = createRouter({
     app.component('app-sidebar', AppSidebar);
     app.component('app-header', AppHeader);
     app.component('status-badge', StatusBadge);
+    app.component('confirm-dialog', ConfirmDialog);
+    app.component('upgrade-modal', UpgradeModal);
+    app.component('service-table', ServiceTable);
 
     // 使用路由
     app.use(router);

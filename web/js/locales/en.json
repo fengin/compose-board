@@ -72,14 +72,15 @@
       "rebuild": "Rebuild",
       "upgrade": "Upgrade",
       "pull": "Pull Image",
-      "view_env": "Env Vars",
-      "view_logs": "View Logs",
+      "view_env": "ENV",
+      "view_logs": "LOG",
       "open_terminal": "Terminal"
     },
     "labels": {
       "local_build": "Local Build",
       "image_diff": "Image Update Available",
-      "env_changed": "Config Changed"
+      "env_changed": "Config Changed",
+      "startup_warning": "Startup Warning"
     },
     "category": {
       "base": "Base Services",
@@ -95,9 +96,7 @@
       "label": "Profile",
       "enable_button": "Enable",
       "disable_button": "Disable",
-      "fix_button": "Fix & Enable",
       "status_enabled": "Enabled",
-      "status_partial": "Partial",
       "status_disabled": "Disabled",
       "confirm_disable": "Are you sure you want to disable Profile \"{name}\"? The following services will be stopped and removed:",
       "enable_success": "Profile \"{name}\" enabled successfully",

@@ -22,6 +22,22 @@ func (h *Handler) ListServices(c *gin.Context) {
 	c.JSON(http.StatusOK, views)
 }
 
+// GetServiceStatus GET /api/services/:name/status
+// 直查单服务实时状态，并同步回写缓存。
+func (h *Handler) GetServiceStatus(c *gin.Context) {
+	name := c.Param("name")
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	view, err := h.Manager.GetRealtimeServiceStatus(ctx, name)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
 // StartService POST /api/services/:name/start
 func (h *Handler) StartService(c *gin.Context) {
 	name := c.Param("name")
@@ -90,6 +106,8 @@ func handleServiceError(c *gin.Context, err error) {
 		case "services.start.profile_required":
 			c.JSON(http.StatusConflict, gin.H{"code": svcErr.Code, "error": svcErr.Message})
 		case "services.not_deployed":
+			c.JSON(http.StatusNotFound, gin.H{"code": svcErr.Code, "error": svcErr.Message})
+		case "services.not_found":
 			c.JSON(http.StatusNotFound, gin.H{"code": svcErr.Code, "error": svcErr.Message})
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"code": svcErr.Code, "error": svcErr.Message})

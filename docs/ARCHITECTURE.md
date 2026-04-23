@@ -324,24 +324,24 @@ type HostIPExtension struct {
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/services` | 服务列表（仅返回 `image:` 型服务，声明 LEFT JOIN 容器） |
-| POST | `/api/services/:key/start` | 启动（仅 `image:` 型服务；已停止容器直接 Start；未部署且无 profile 的必选服务等价 `docker compose up -d <service>`） |
-| POST | `/api/services/:key/stop` | 停止 |
-| POST | `/api/services/:key/restart` | 重启 |
-| GET | `/api/services/:key/env` | 服务环境变量 |
-| GET | `/api/services/:key/status` | 实时状态 |
+| POST | `/api/services/:name/start` | 启动（仅 `image:` 型服务；已停止容器直接 Start；未部署且无 profile 的必选服务等价 `docker compose up -d <service>`） |
+| POST | `/api/services/:name/stop` | 停止 |
+| POST | `/api/services/:name/restart` | 重启 |
+| GET | `/api/services/:name/env` | 服务环境变量 |
+| GET | `/api/services/:name/status` | 单服务实时状态；直查 Docker 当前服务状态并同步回写服务缓存 |
 
 ### 4.3 升级与重建（仅 image: 型服务）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/services/:key/pull` | 拉取镜像 |
-| GET | `/api/services/:key/pull` | 拉取状态查询 |
-| POST | `/api/services/:key/upgrade` | 应用升级 |
-| POST | `/api/services/:key/rebuild` | 重建容器 |
+| POST | `/api/services/:name/pull` | 拉取镜像 |
+| GET | `/api/services/:name/pull` | 拉取状态查询 |
+| POST | `/api/services/:name/upgrade` | 应用升级 |
+| POST | `/api/services/:name/rebuild` | 重建容器 |
 
 ### 4.4 Profiles 管理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/profiles` | 所有 profiles，每项含 `status`（`enabled` / `partial` / `disabled`）和服务列表 |
+| GET | `/api/profiles` | 所有 profiles 的配置启用态（`enabled` / `disabled`） |
 | POST | `/api/profiles/:name/enable` | 启用整个 profile |
 | POST | `/api/profiles/:name/disable` | 停用整个 profile |
 
@@ -471,15 +471,14 @@ Dashboard 页面不提供独立的聚合接口，由前端并发组合调用：
 **交互要点**：
 - v1 服务管理页只覆盖 `image:` 型服务
 - 必选服务按分类分组（base/backend/frontend/init/other），分类来自 Compose label `com.composeboard.category`，缺省为 `other`
-- 可选服务按 profile 分组，标题含三态状态与操作按钮：
+- 可选服务按 profile 分组，标题含配置态状态与操作按钮：
   - `enabled` → `已启用 ✅ ── [停用]`
-  - `partial` → `部分启用 ⚠ ── [补齐启用] [全部停用]`
   - `disabled` → `未启用 ⭕ ── [启用]`
-- `[启用]` / `[补齐启用]` 按钮 → 确认弹窗 → `POST /api/profiles/:name/enable`
+- `[启用]` 按钮 → 确认弹窗 → `POST /api/profiles/:name/enable`
 - 未部署且无 profile 的必选服务行显示 `[启动]`，语义等价 `docker compose up -d <service>`
-- 未部署的可选服务行上**无单服务操作按钮**
-- Profile 启用/停用操作走 **await API + 轮询校验** 两阶段：立即关弹窗 + 头部 `profileLoading` + 下属服务行批量 `_loading` → `await POST /api/profiles/:name/enable|disable`（backend 完成 Up/Stop+Rm 并刷新 cache）→ 轮询 `GET /api/profiles` 直到满足双重判据（聚合态 `profile.status` 命中目标态 **且** 所有下属服务个体态一致）。详见 `DESIGN_DECISIONS.md §13`
-- 单服务操作（stop/start/restart/upgrade/rebuild）的轮询机制见 `DESIGN_DECISIONS.md §12`
+- 未启用的可选服务行上不显示单服务 `[启动]`；Profile 启用后，组内服务与固定服务使用同一套单服务操作规则
+- Profile 启用/停用操作只改变 Profile 配置启用态；服务是否真正进入目标状态，前端按组内服务逐个轮询 `GET /api/services/:name/status`
+- 单服务操作（stop/start/restart/upgrade/rebuild）的 loading 判定与行内即时更新统一基于 `GET /api/services/:name/status`。详见 `DESIGN_DECISIONS.md §12`
 
 ---
 

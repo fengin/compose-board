@@ -337,38 +337,75 @@ func (c *Client) GetContainerStatus(ctx context.Context, containerID string) (*C
 		Status:    ctr.State,
 		State:     ctr.Status,
 		StartedAt: startedAt,
+		Image:     ctr.Image,
 	}, nil
 }
 
-// FindContainerByServiceName 通过 compose.service 标签查找容器
-func (c *Client) FindContainerByServiceName(ctx context.Context, serviceName string) (*ContainerStatus, string, error) {
+// GetServiceContainerInfo 按服务名直查实时容器信息。
+// 该方法不走缓存，适合操作后的单服务轮询。
+func (c *Client) GetServiceContainerInfo(ctx context.Context, serviceName string, withStats bool) (*ContainerInfo, error) {
 	filter := url.QueryEscape(fmt.Sprintf(`{"label":["%s=%s","%s=%s"]}`,
 		labelComposeProject, c.projectName,
 		labelComposeService, serviceName))
 	resp, err := c.doRequest(ctx, "GET", "/containers/json?all=true&filters="+filter, nil)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var containers []dockerContainer
 	if err := json.NewDecoder(resp.Body).Decode(&containers); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if len(containers) == 0 {
-		return nil, "", fmt.Errorf("未找到服务 %s 的容器: %w", serviceName, ErrNotFound)
+		return nil, fmt.Errorf("未找到服务 %s 的容器: %w", serviceName, ErrNotFound)
 	}
 
 	ctr := selectBestContainer(containers)
-	newID := ctr.ID[:12]
-	startedAt := c.getStartedAt(ctx, ctr.ID)
+	info := c.convertContainer(ctr)
+
+	inspect, err := c.inspectContainer(ctx, ctr.ID)
+	if err == nil {
+		info.StartedAt = inspect.State.StartedAt
+		info.Health = "none"
+		if inspect.State.Health != nil {
+			info.Health = inspect.State.Health.Status
+		}
+	}
+
+	if info.StartedAt == "" {
+		info.StartedAt = c.getStartedAt(ctx, ctr.ID)
+	}
+	if info.Health == "" {
+		info.Health = "none"
+	}
+
+	if withStats && info.Status == "running" {
+		stats, err := c.GetContainerStats(ctx, ctr.ID)
+		if err == nil {
+			info.CPU = stats.CPU
+			info.MemUsage = stats.MemUsage
+			info.MemLimit = stats.MemLimit
+			info.MemPercent = stats.MemPercent
+		}
+	}
+
+	return &info, nil
+}
+
+// FindContainerByServiceName 通过 compose.service 标签查找容器
+func (c *Client) FindContainerByServiceName(ctx context.Context, serviceName string) (*ContainerStatus, string, error) {
+	info, err := c.GetServiceContainerInfo(ctx, serviceName, false)
+	if err != nil {
+		return nil, "", err
+	}
 
 	return &ContainerStatus{
-		Status:    ctr.State,
-		State:     ctr.Status,
-		StartedAt: startedAt,
-		Image:     ctr.Image,
-	}, newID, nil
+		Status:    info.Status,
+		State:     info.State,
+		StartedAt: info.StartedAt,
+		Image:     info.Image,
+	}, info.ID, nil
 }
 
 func buildContainerLogsPath(containerID string, tail string, follow bool, since string) string {

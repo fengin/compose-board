@@ -55,8 +55,8 @@ func (l *LifecycleManager) StartService(ctx context.Context, name string) error 
 				}
 			}
 
-			// S-4: 有 profiles 且未部署 → 应通过 Profile API 启用
-			if notDeployed && len(decl.Profiles) > 0 {
+			// Profile 服务只有在其配置态已启用时，才允许单服务启动。
+			if notDeployed && len(decl.Profiles) > 0 && !l.manager.IsAnyProfileEnabled(decl.Profiles) {
 				return &ServiceError{
 					Code:    "services.start.profile_required",
 					Message: fmt.Sprintf("可选服务 %s 属于 profile %v，请通过 Profile 管理启用", name, decl.Profiles),
@@ -69,7 +69,14 @@ func (l *LifecycleManager) StartService(ctx context.Context, name string) error 
 	status, containerID, err := l.dockerCli.FindContainerByServiceName(ctx, name)
 	if err != nil {
 		// 未部署 → compose up
-		if err := l.executor.Up(ctx, []string{name}, compose.UpOptions{}); err != nil {
+		upOptions := compose.UpOptions{}
+		project := l.manager.GetProject()
+		if project != nil {
+			if decl, ok := project.Services[name]; ok && len(decl.Profiles) > 0 {
+				upOptions.Profiles = decl.Profiles
+			}
+		}
+		if err := l.executor.Up(ctx, []string{name}, upOptions); err != nil {
 			return fmt.Errorf("启动服务失败: %w", err)
 		}
 		l.cache.ForceRefresh()
