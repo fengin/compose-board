@@ -8,25 +8,29 @@ package api
 import (
 	"github.com/fengin/composeboard/internal/docker"
 	"github.com/fengin/composeboard/internal/service"
+	"github.com/fengin/composeboard/internal/terminal"
 )
 
 // Handler API 请求处理器
 type Handler struct {
 	ProjectName string // 项目名
 	ProjectDir  string // 项目目录
-	Manager    *service.ServiceManager
-	Lifecycle  *service.LifecycleManager
-	Upgrade    *service.UpgradeManager
-	Profiles   *service.ProfileManager
-	State      *service.StateManager
-	Cache      *docker.ContainerCache
-	DockerCli  *docker.Client
+	AppVersion  string // 应用版本号
+	Manager     *service.ServiceManager
+	Lifecycle   *service.LifecycleManager
+	Upgrade     *service.UpgradeManager
+	Profiles    *service.ProfileManager
+	State       *service.StateManager
+	Cache       *docker.ContainerCache
+	DockerCli   *docker.Client
+	Terminal    *terminal.SessionManager
 }
 
 // NewHandler 创建 API Handler
 func NewHandler(
 	projectName string,
 	projectDir string,
+	appVersion string,
 	manager *service.ServiceManager,
 	lifecycle *service.LifecycleManager,
 	upgrade *service.UpgradeManager,
@@ -34,10 +38,12 @@ func NewHandler(
 	state *service.StateManager,
 	cache *docker.ContainerCache,
 	dockerCli *docker.Client,
+	terminalM *terminal.SessionManager,
 ) *Handler {
 	return &Handler{
 		ProjectName: projectName,
 		ProjectDir:  projectDir,
+		AppVersion:  appVersion,
 		Manager:     manager,
 		Lifecycle:   lifecycle,
 		Upgrade:     upgrade,
@@ -45,5 +51,6 @@ func NewHandler(
 		State:       state,
 		Cache:       cache,
 		DockerCli:   dockerCli,
+		Terminal:    terminalM,
 	}
 }

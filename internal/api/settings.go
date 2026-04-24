@@ -20,6 +20,7 @@ type ProjectSettingsResponse struct {
 	ComposeVersion string   `json:"compose_version"`
 	ServiceCount   int      `json:"service_count"`
 	ProfileNames   []string `json:"profile_names"`
+	AppVersion     string   `json:"app_version"`
 }
 
 // GetProjectSettings GET /api/settings/project
@@ -27,6 +28,7 @@ func (h *Handler) GetProjectSettings(c *gin.Context) {
 	resp := ProjectSettingsResponse{
 		ProjectName: h.ProjectName,
 		ProjectDir:  h.ProjectDir,
+		AppVersion:  h.AppVersion,
 	}
 
 	project := h.Manager.GetProject()

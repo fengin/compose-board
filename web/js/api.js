@@ -127,6 +127,19 @@ const API = {
         const token = this.getToken();
         const url = `${this.baseURL}/api/services/${service}/logs?follow=true&tail=${tail}&token=${token}`;
         return new EventSource(url);
+    },
+
+    // WebSocket URL（WebSocket 无法设置 Authorization Header，使用 query token）
+    wsURL(path) {
+        const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+        const token = this.getToken() || '';
+        const separator = path.includes('?') ? '&' : '?';
+        return `${scheme}://${location.host}${this.baseURL}${path}${separator}token=${encodeURIComponent(token)}`;
+    },
+
+    // 创建 Web 终端连接
+    createTerminalSocket(service) {
+        return new WebSocket(this.wsURL(`/api/services/${encodeURIComponent(service)}/terminal`));
     }
 };
 

@@ -29,6 +29,7 @@ const AppHeader = {
                 'dashboard': 'dashboard.title',
                 'services': 'services.title',
                 'logs': 'logs.title',
+                'terminal': 'terminal.title',
                 'env': 'env.title'
             };
             const key = routeToKey[this.$route.name];

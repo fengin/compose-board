@@ -9,7 +9,7 @@
  */
 const LogsPage = {
     template: `
-    <div>
+    <div style="display: flex; flex-direction: column; height: 100%;">
         <div class="log-toolbar">
             <select v-model="selectedService" @change="reconnect">
                 <option value="">— {{ $t('logs.select_service') }} —</option>

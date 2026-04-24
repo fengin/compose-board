@@ -532,7 +532,9 @@ type dockerContainer struct {
 }
 
 type dockerInspect struct {
-	State struct {
+	Platform string `json:"Platform"`
+	Os       string `json:"Os"`
+	State    struct {
 		StartedAt string `json:"StartedAt"` // 容器启动时间 ISO 时间戳
 		Health    *struct {
 			Status string `json:"Status"`

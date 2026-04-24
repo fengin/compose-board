@@ -248,6 +248,10 @@ const ServicesPage = {
                 this.goToLogs(service);
                 return;
             }
+            if (type === 'go-terminal') {
+                this.goToTerminal(service);
+                return;
+            }
             if (type === 'upgrade') {
                 this.confirmUpgrade(service);
                 return;
@@ -691,6 +695,10 @@ const ServicesPage = {
 
         goToLogs(service) {
             this.$router.push({ name: 'logs', query: { service: service.name } });
+        },
+
+        goToTerminal(service) {
+            this.$router.push({ name: 'terminal', query: { service: service.name } });
         }
     },
     mounted() {

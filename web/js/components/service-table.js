@@ -94,6 +94,7 @@ const ServiceTable = {
                 restart: 'act-default',
                 'show-env': 'act-default',
                 'go-logs': 'act-default',
+                'go-terminal': 'act-default',
                 upgrade: 'act-upgrade',
                 rebuild: 'act-rebuild'
             };
@@ -106,6 +107,7 @@ const ServiceTable = {
                 restart: '↻',
                 'show-env': '⚙',
                 'go-logs': '📋',
+                'go-terminal': '▣',
                 upgrade: '⬆',
                 rebuild: '🔄'
             };
@@ -118,6 +120,7 @@ const ServiceTable = {
                 restart: 'services.actions.restart',
                 'show-env': 'services.actions.view_env',
                 'go-logs': 'services.actions.view_logs',
+                'go-terminal': 'services.actions.open_terminal',
                 upgrade: 'services.actions.upgrade',
                 rebuild: 'services.actions.rebuild'
             };

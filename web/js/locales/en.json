@@ -47,7 +47,10 @@
     "stopped": "Stopped",
     "not_deployed": "Not Deployed",
     "host_ip": "Host IP",
+    "ip_list": "IP List",
     "cores": "Cores",
+    "server_info": "Server Info",
+    "used": "Used",
     "no_services": "No services found. Check Docker daemon and project configuration."
   },
   "services": {
@@ -199,9 +202,25 @@
     "select_service": "Select Service",
     "connect": "Connect",
     "disconnect": "Disconnect",
+    "connecting": "Connecting...",
+    "connecting_service": "Connecting to {name}...",
     "connected": "Connected to {name}",
+    "connected_shell": "Connected ({shell})",
     "disconnected": "Disconnected",
-    "only_running": "Only running services can connect to terminal"
+    "connection_error": "Terminal connection failed",
+    "session_closed": "This terminal session has ended",
+    "closed_by_user": "Terminal disconnected. This session has been closed.",
+    "abnormal_disconnect": "Connection interrupted. This terminal session has ended; reconnecting will create a new shell.",
+    "reconnect_new_shell": "Reconnecting opens a new shell. The previous working directory, foreground process, and unsaved input will not be restored.",
+    "empty_hint": "Select a running service and click \"Connect\" to open a terminal",
+    "asset_load_failed": "Failed to load terminal assets",
+    "only_running": "Only running services can connect to terminal",
+    "no_shell": "This container does not have an available shell and does not support terminal access.",
+    "too_many_sessions": "Too many terminal sessions are open. Close another terminal first.",
+    "exec_create_failed": "Failed to create terminal session",
+    "exec_start_failed": "Failed to start terminal session",
+    "invalid_message": "Invalid terminal control message.",
+    "unknown_message": "Unknown terminal control message received."
   },
   "settings": {
     "title": "Settings",

@@ -20,6 +20,7 @@ import (
 	"github.com/fengin/composeboard/internal/config"
 	"github.com/fengin/composeboard/internal/docker"
 	"github.com/fengin/composeboard/internal/service"
+	"github.com/fengin/composeboard/internal/terminal"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,7 +29,7 @@ var webFS embed.FS
 
 // 版本信息（编译时通过 -ldflags 注入）
 var (
-	Version   = "dev"
+	Version   = "1.0.0"
 	BuildTime = "unknown"
 )
 
@@ -119,13 +120,16 @@ func main() {
 	// 生命周期管理器（启停重启业务逻辑）
 	lifecycleM := service.NewLifecycleManager(manager, cache, dockerCli, executor)
 
+	// Web 终端会话管理器（空闲时不持有会话资源）
+	terminalM := terminal.NewSessionManager(dockerCli, 0)
+
 	// API Handler
 	// ProjectName 用于 UI 显示：优先用 config 的显示名称，兜底用 Docker project name
 	displayName := cfg.Project.Name
 	if displayName == "" {
 		displayName = dockerProjectName
 	}
-	handler := api.NewHandler(displayName, cfg.Project.Dir, manager, lifecycleM, upgradeM, profileM, stateM, cache, dockerCli)
+	handler := api.NewHandler(displayName, cfg.Project.Dir, Version, manager, lifecycleM, upgradeM, profileM, stateM, cache, dockerCli, terminalM)
 
 	// === 设置 Gin ===
 	gin.SetMode(gin.ReleaseMode)
@@ -178,6 +182,9 @@ func main() {
 		// 日志
 		authorized.GET("/services/:name/logs", handler.GetContainerLogs)
 
+		// Web 终端
+		authorized.GET("/services/:name/terminal", handler.OpenServiceTerminal)
+
 		// 设置（B-1: Dashboard 项目信息卡片）
 		authorized.GET("/settings/project", handler.GetProjectSettings)
 	}
@@ -198,6 +205,9 @@ func main() {
 	})
 	r.GET("/js/*filepath", func(c *gin.Context) {
 		c.FileFromFS("js"+c.Param("filepath"), http.FS(webContent))
+	})
+	r.GET("/img/*filepath", func(c *gin.Context) {
+		c.FileFromFS("img"+c.Param("filepath"), http.FS(webContent))
 	})
 
 	// SPA 回退

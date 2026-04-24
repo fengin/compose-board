@@ -13,6 +13,7 @@ const routes = [
     { path: '/', name: 'dashboard', component: DashboardPage },
     { path: '/services', name: 'services', component: ServicesPage },
     { path: '/logs', name: 'logs', component: LogsPage },
+    { path: '/terminal', name: 'terminal', component: TerminalPage },
     { path: '/env', name: 'env', component: EnvPage },
     // G-4: 旧 URL 兼容重定向
     { path: '/containers', redirect: '/services' }
@@ -58,6 +59,7 @@ const router = createRouter({
                 const next = this.locale === 'zh' ? 'en' : 'zh';
                 await I18n.switchLocale(next);
                 this.locale = next;
+                document.title = I18n.t('app.name') + ' — ' + I18n.t('app.subtitle');
             }
         },
         provide() {

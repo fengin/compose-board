@@ -87,6 +87,9 @@ const ServicesRules = {
             actions.push('show-env');
             actions.push('go-logs');
         }
+        if (status === 'running') {
+            actions.push('go-terminal');
+        }
 
         if (status !== 'not_deployed' && service.image_diff) {
             actions.push('upgrade');

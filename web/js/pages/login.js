@@ -13,7 +13,7 @@ const LoginPage = {
             <span>{{ langText }}</span>
         </button>
         <div class="login-card">
-            <div class="login-logo">C</div>
+            <img class="login-logo" src="/img/logo-128.png" alt="ComposeBoard">
             <h1 class="login-title">{{ $t('app.name') }}</h1>
             <p class="login-subtitle">{{ $t('app.subtitle') }}</p>
 

@@ -47,7 +47,10 @@
     "stopped": "已停止",
     "not_deployed": "未部署",
     "host_ip": "主机 IP",
+    "ip_list": "IP 列表",
     "cores": "核",
+    "server_info": "服务器信息",
+    "used": "已用",
     "no_services": "未发现任何服务，请检查 Docker 服务和项目配置"
   },
   "services": {
@@ -199,9 +202,25 @@
     "select_service": "选择服务",
     "connect": "连接",
     "disconnect": "断开",
+    "connecting": "连接中...",
+    "connecting_service": "正在连接 {name}...",
     "connected": "已连接到 {name}",
+    "connected_shell": "已连接 ({shell})",
     "disconnected": "连接已断开",
-    "only_running": "仅运行中的服务可连接终端"
+    "connection_error": "终端连接失败",
+    "session_closed": "本次终端会话已结束",
+    "closed_by_user": "已断开终端连接。本次会话已关闭。",
+    "abnormal_disconnect": "连接异常中断。本次终端会话已结束，重新连接将创建新的 shell。",
+    "reconnect_new_shell": "重新连接会打开一个新的 shell，之前会话中的工作目录、前台进程和未保存输入不会恢复。",
+    "empty_hint": "选择运行中的服务并点击“连接”打开终端",
+    "asset_load_failed": "终端资源加载失败",
+    "only_running": "仅运行中的服务可连接终端",
+    "no_shell": "该服务容器未内置可用 shell，不支持终端连接。",
+    "too_many_sessions": "终端会话过多，请先关闭其他终端。",
+    "exec_create_failed": "创建终端会话失败",
+    "exec_start_failed": "启动终端会话失败",
+    "invalid_message": "终端控制消息格式错误。",
+    "unknown_message": "收到未知终端控制消息。"
   },
   "settings": {
     "title": "设置",
