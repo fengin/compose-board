@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # Adjust based on your go.mod
+          cache: true
+
+      - name: Get Version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Build Binaries
+        run: |
+          mkdir -p dist
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-linux-amd64 main.go
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-linux-arm64 main.go
+          # Windows AMD64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-windows-amd64.exe main.go
+          # MacOS AMD64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-darwin-amd64 main.go
+          # MacOS ARM64
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-darwin-arm64 main.go
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/composeboard-linux-amd64
+            dist/composeboard-linux-arm64
+            dist/composeboard-windows-amd64.exe
+            dist/composeboard-darwin-amd64
+            dist/composeboard-darwin-arm64
+          generate_release_notes: true
