@@ -90,6 +90,7 @@ const router = createRouter({
     app.component('confirm-dialog', ConfirmDialog);
     app.component('upgrade-modal', UpgradeModal);
     app.component('service-table', ServiceTable);
+    app.component('code-editor', CodeEditorComponent);
 
     // 使用路由
     app.use(router);

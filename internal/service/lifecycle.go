@@ -80,6 +80,7 @@ func (l *LifecycleManager) StartService(ctx context.Context, name string) error 
 			return fmt.Errorf("启动服务失败: %w", err)
 		}
 		l.cache.ForceRefresh()
+		l.manager.UpdateServiceState(name)
 		return nil
 	}
 

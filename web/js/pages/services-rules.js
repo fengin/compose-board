@@ -37,6 +37,7 @@ const ServicesRules = {
         const pendingEnv = Array.isArray(service.pending_env) ? service.pending_env : [];
         const hasImageDiff = !!service.image_diff;
         const hasEnvDiff = pendingEnv.length > 0 && !hasImageDiff;
+        const hasConfigDiff = !!service.config_diff && !hasImageDiff;
         const loading = !!options.loading;
 
         return {
@@ -49,6 +50,7 @@ const ServicesRules = {
                 currentVersion: this.extractVersion(currentImage),
                 nextVersion: hasImageDiff ? this.extractVersion(service.declared_image || '') : '',
                 hasEnvDiff,
+                hasConfigDiff,
                 envChangedTitle: hasEnvDiff ? pendingEnv.join(', ') : '',
                 status: service.status,
                 startupWarning: !!service.startup_warning,
@@ -97,6 +99,9 @@ const ServicesRules = {
         if (status !== 'not_deployed' && service.pending_env && service.pending_env.length > 0 && !service.image_diff) {
             actions.push('rebuild');
         }
+        if (status !== 'not_deployed' && service.config_diff && !service.image_diff) {
+            actions.push('rebuild');
+        }
 
         return [...new Set(actions)];
     },
@@ -120,6 +125,9 @@ const ServicesRules = {
             done = false;
         }
         if (action === 'rebuild' && done && fresh.pending_env && fresh.pending_env.length > 0) {
+            done = false;
+        }
+        if (action === 'rebuild' && done && fresh.config_diff) {
             done = false;
         }
 

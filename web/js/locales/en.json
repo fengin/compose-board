@@ -6,7 +6,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "services": "Services",
-    "env": "Environment",
+    "config": "Configuration",
     "logs": "Logs",
     "terminal": "Terminal",
     "deploy": "Deploy",
@@ -83,6 +83,7 @@
       "local_build": "Local Build",
       "image_diff": "Image Update Available",
       "env_changed": "Config Changed",
+      "config_changed": "Compose Config Changed",
       "startup_warning": "Startup Warning"
     },
     "category": {
@@ -152,6 +153,15 @@
       "operation_failed": "Operation failed"
     }
   },
+  "config": {
+    "title": "Configuration",
+    "tab_env": "Environment (.env)",
+    "tab_compose": "Compose Config",
+    "file_not_exist": "(File does not exist, will be created on save)",
+    "env_not_exist_hint": ".env file does not exist yet. Edit content below and save to create it in the project directory.",
+    "compose_not_exist_hint": "docker-compose.yml does not exist yet. Edit content below and save to create it in the project directory.",
+    "download": "Download"
+  },
   "env": {
     "title": "Environment Configuration",
     "table_mode": "Table Mode",
@@ -175,6 +185,24 @@
     "save_tip_dismiss": "Got it",
     "save_tip_goto": "Go to Services",
     "load_failed": "Failed to load .env"
+  },
+  "compose": {
+    "save": "Save",
+    "refresh": "Refresh",
+    "unsaved": "Unsaved changes",
+    "diff_title": "Compose Changes Review",
+    "no_diff": "No changes",
+    "confirm_save_btn": "Confirm Save",
+    "save_failed": "Save failed",
+    "load_failed": "Failed to load Compose file",
+    "yaml_error": "YAML syntax error",
+    "save_tip_title": "Saved Successfully",
+    "save_tip_message": "docker-compose.yml saved with backup created.",
+    "save_tip_note": "Changes won't take effect until new/changed services are started or rebuilt.",
+    "save_tip_dismiss": "Got it",
+    "save_tip_goto": "Go to Services",
+    "services_added": "Added services",
+    "services_removed": "Removed services"
   },
   "logs": {
     "title": "Log Viewer",

@@ -265,7 +265,7 @@ Remove-Item Env:\CGO_ENABLED
 ### 7.4 版本号注入
 
 ```powershell
-$version = "v1.0.0"
+$version = "v1.1.0"
 $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
 go build -ldflags "-s -w -X main.Version=$version -X main.BuildTime=$buildTime" -o bin\composeboard.exe .
 ```

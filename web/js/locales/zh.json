@@ -6,7 +6,7 @@
   "nav": {
     "dashboard": "概览",
     "services": "服务管理",
-    "env": "环境配置",
+    "config": "配置修改",
     "logs": "日志查看",
     "terminal": "终端",
     "deploy": "部署向导",
@@ -51,7 +51,7 @@
     "cores": "核",
     "server_info": "服务器信息",
     "used": "已用",
-    "no_services": "未发现任何服务，请检查 Docker 服务和项目配置"
+    "no_services": "未发现任何服务，请检查Docker服务和项目配置"
   },
   "services": {
     "title": "服务管理",
@@ -83,6 +83,7 @@
       "local_build": "本地构建",
       "image_diff": "镜像有更新",
       "env_changed": "配置已变更",
+      "config_changed": "Compose 配置已变更",
       "startup_warning": "启动异常"
     },
     "category": {
@@ -152,6 +153,15 @@
       "operation_failed": "操作失败"
     }
   },
+  "config": {
+    "title": "配置修改",
+    "tab_env": "环境变量(.env)",
+    "tab_compose": "Compose 配置",
+    "file_not_exist": "(文件不存在，保存时自动创建)",
+    "env_not_exist_hint": ".env 文件尚未创建，可在下方直接编辑内容，保存后将在项目目录自动创建该文件。",
+    "compose_not_exist_hint": "docker-compose.yml 文件尚未创建，可在下方直接编辑内容，保存后将在项目目录自动创建该文件。",
+    "download": "下载"
+  },
   "env": {
     "title": "环境配置",
     "table_mode": "表格模式",
@@ -175,6 +185,24 @@
     "save_tip_dismiss": "我知道了",
     "save_tip_goto": "前往服务管理",
     "load_failed": "加载 .env 失败"
+  },
+  "compose": {
+    "save": "保存",
+    "refresh": "刷新",
+    "unsaved": "有未保存的修改",
+    "diff_title": "Compose 变更确认",
+    "no_diff": "无变更",
+    "confirm_save_btn": "确认保存",
+    "save_failed": "保存失败",
+    "load_failed": "加载 Compose 文件失败",
+    "yaml_error": "YAML 语法错误",
+    "save_tip_title": "保存成功",
+    "save_tip_message": "docker-compose.yml 文件已保存并创建备份。",
+    "save_tip_note": "修改不会立即生效，新增/变更的服务须启动或重建才应用新配置。",
+    "save_tip_dismiss": "我知道了",
+    "save_tip_goto": "前往服务管理",
+    "services_added": "新增服务",
+    "services_removed": "删除服务"
   },
   "logs": {
     "title": "日志查看",

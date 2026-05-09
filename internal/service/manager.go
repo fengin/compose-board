@@ -59,6 +59,7 @@ type ServiceView struct {
 	ImageDiff     bool     `json:"image_diff"`     // 镜像有差异
 	EnvDiff       bool     `json:"env_diff"`       // 环境变量有变更（来自 state）
 	PendingEnv    []string `json:"pending_env"`    // 具体变更的变量名列表
+	ConfigDiff    bool     `json:"config_diff"`    // Compose 配置有结构性变更
 }
 
 // ServiceManager 服务管理器
@@ -256,10 +257,14 @@ func (m *ServiceManager) GetRealtimeServiceStatus(ctx context.Context, serviceNa
 	}
 
 	pendingEnv := m.getPendingEnvChanges()
+	pendingConfig := m.getPendingConfigChanges()
 	view := m.buildServiceView(decl, envVars, runtimeInfo)
 	if vars, ok := pendingEnv[serviceName]; ok {
 		view.EnvDiff = true
 		view.PendingEnv = vars
+	}
+	if pendingConfig[serviceName] {
+		view.ConfigDiff = true
 	}
 	return view, nil
 }
@@ -311,6 +316,7 @@ func (m *ServiceManager) buildServiceViews(project *compose.ComposeProject, envV
 	}
 
 	pendingEnv := m.getPendingEnvChanges()
+	pendingConfig := m.getPendingConfigChanges()
 	views := make([]ServiceView, 0, len(project.Services))
 
 	// 注意：project.Services 是 map，必须统一走声明层稳定顺序。
@@ -319,6 +325,9 @@ func (m *ServiceManager) buildServiceViews(project *compose.ComposeProject, envV
 		if vars, ok := pendingEnv[decl.Name]; ok {
 			view.EnvDiff = true
 			view.PendingEnv = vars
+		}
+		if pendingConfig[decl.Name] {
+			view.ConfigDiff = true
 		}
 		views = append(views, view)
 	}
@@ -448,6 +457,19 @@ func (m *ServiceManager) getPendingEnvChanges() map[string][]string {
 		return nil
 	}
 	return m.stateM.GetPendingEnvChanges()
+}
+
+func (m *ServiceManager) getPendingConfigChanges() map[string]bool {
+	if m.stateM == nil {
+		return nil
+	}
+	return m.stateM.GetPendingConfigChanges()
+}
+
+func (m *ServiceManager) UpdateServiceState(serviceName string) {
+	if m.stateM != nil {
+		m.stateM.UpdateServiceState(serviceName)
+	}
 }
 
 func (m *ServiceManager) buildStateEntryFromRuntime(decl *compose.DeclaredService, envVars map[string]string, runtimeEnv map[string]string) ServiceStateEntry {

@@ -29,7 +29,7 @@ var webFS embed.FS
 
 // 版本信息（编译时通过 -ldflags 注入）
 var (
-	Version   = "1.0.0"
+	Version   = "1.1.0"
 	BuildTime = "unknown"
 )
 
@@ -177,7 +177,13 @@ func main() {
 
 		// .env 配置
 		authorized.GET("/env", handler.GetEnvFile)
+		authorized.GET("/env/download", handler.DownloadEnvFile)
 		authorized.PUT("/env", handler.SaveEnvFile) // B-2: 对齐 DESIGN_DECISIONS §9
+
+		// docker-compose.yml 配置
+		authorized.GET("/compose-file", handler.GetComposeFile)
+		authorized.GET("/compose-file/download", handler.DownloadComposeFile)
+		authorized.PUT("/compose-file", handler.SaveComposeFile)
 
 		// 日志
 		authorized.GET("/services/:name/logs", handler.GetContainerLogs)

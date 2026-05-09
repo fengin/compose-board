@@ -99,6 +99,13 @@ func (p *ProfileManager) EnableProfile(name string) error {
 	p.cache.RefreshNow(false)
 	if p.stateM != nil {
 		p.stateM.SetProfileEnabled(name, true)
+		if project := p.manager.GetProject(); project != nil {
+			if services, ok := project.GetProfiles()[name]; ok {
+				for _, svcName := range services {
+					p.stateM.UpdateServiceState(svcName)
+				}
+			}
+		}
 	}
 	log.Printf("[PROFILE] 启用完成: %s", name)
 	return nil

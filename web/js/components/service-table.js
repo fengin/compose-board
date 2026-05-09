@@ -39,6 +39,9 @@ const ServiceTable = {
                         <div v-if="row.display.hasEnvDiff" style="margin-top:4px">
                             <span class="env-diff" :title="row.display.envChangedTitle">🔸 {{ $t('services.labels.env_changed') }}</span>
                         </div>
+                        <div v-if="row.display.hasConfigDiff" style="margin-top:4px">
+                            <span class="env-diff">🔸 {{ $t('services.labels.config_changed') }}</span>
+                        </div>
                     </td>
                     <td>
                         <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">

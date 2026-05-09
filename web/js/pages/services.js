@@ -347,10 +347,24 @@ const ServicesPage = {
 
         confirmRebuild(service) {
             const varList = (service.pending_env || []).join(', ');
+            const hasEnvDiff = varList.length > 0;
+            const hasConfigDiff = !!service.config_diff;
+
+            let messageHtml = '<div>';
+            if (hasEnvDiff) {
+                messageHtml += '<div class="form-label">' + this.$t('services.modal.changed_vars') + '</div>';
+                messageHtml += '<div class="mono" style="padding:8px 14px;background:#F5F3FF;border-radius:var(--radius);font-size:0.85rem;color:#5B21B6">' + varList + '</div>';
+            }
+            if (hasConfigDiff) {
+                messageHtml += '<div class="form-label" style="margin-top:' + (hasEnvDiff ? '12px' : '0') + '">' + this.$t('services.labels.config_changed') + '</div>';
+                messageHtml += '<div class="mono" style="padding:8px 14px;background:#FFF7ED;border-radius:var(--radius);font-size:0.85rem;color:#9A3412">docker-compose.yml</div>';
+            }
+            messageHtml += '</div>';
+
             this.confirmModal = {
                 visible: true,
                 title: '🔄 ' + this.$t('services.actions.rebuild') + ' — ' + service.name,
-                message: '<div><div class="form-label">' + this.$t('services.modal.changed_vars') + '</div><div class="mono" style="padding:8px 14px;background:#F5F3FF;border-radius:var(--radius);font-size:0.85rem;color:#5B21B6">' + varList + '</div></div>',
+                message: messageHtml,
                 warning: '⚠️ ' + this.$t('services.modal.rebuild_warning'),
                 btnText: this.$t('services.modal.confirm_rebuild'),
                 btnClass: 'btn-primary',

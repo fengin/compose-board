@@ -8,6 +8,8 @@
 package compose
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +40,7 @@ type DeclaredService struct {
 	Category    string            // 从 com.composeboard.category label 读取，缺省 "other"
 	ImageSource string            // "registry" | "build" | "unknown"
 	VarRefs     []string          // 服务配置中引用的非 image 变量名列表（用于 pending_env / rebuild 判定）
+	Hash        string            // 结构性哈希，忽略 image 和 labels，涵盖了所有配置（包括 volume, command 等）
 }
 
 // 变量引用正则：匹配 ${VAR_NAME} 和 ${VAR:-default} 等形式，提取变量名部分
@@ -89,8 +92,24 @@ func ParseComposeFile(dir string) (*ComposeProject, error) {
 		FilePath: filePath,
 	}
 
-	for name, svc := range raw.Services {
-		declared := parseDeclaredService(name, svc)
+	for name, rawMap := range raw.Services {
+		rawBytes, _ := yaml.Marshal(rawMap)
+		var svc rawServiceDefinition
+		yaml.Unmarshal(rawBytes, &svc)
+
+		declared := parseDeclaredService(name, svc, rawBytes)
+
+		// 计算服务层面的全量配置哈希（排除 image 和 labels）
+		hashMap := make(map[string]interface{})
+		for k, v := range rawMap {
+			if k != "image" && k != "labels" {
+				hashMap[k] = v
+			}
+		}
+		hashBytes, _ := json.Marshal(hashMap)
+		sum := sha256.Sum256(hashBytes)
+		declared.Hash = fmt.Sprintf("%x", sum[:8])
+
 		project.Services[name] = declared
 	}
 
@@ -129,8 +148,8 @@ func (p *ComposeProject) GetVersion() string {
 
 // rawComposeFile YAML 反序列化的中间结构
 type rawComposeFile struct {
-	Version  string                          `yaml:"version"`
-	Services map[string]rawServiceDefinition `yaml:"services"`
+	Version  string                            `yaml:"version"`
+	Services map[string]map[string]interface{} `yaml:"services"`
 }
 
 // rawServiceDefinition 服务定义的 YAML 中间结构
@@ -145,7 +164,7 @@ type rawServiceDefinition struct {
 }
 
 // parseDeclaredService 从原始 YAML 定义构造 DeclaredService
-func parseDeclaredService(name string, raw rawServiceDefinition) *DeclaredService {
+func parseDeclaredService(name string, raw rawServiceDefinition, rawBytes []byte) *DeclaredService {
 	svc := &DeclaredService{
 		Name:     name,
 		Image:    raw.Image,
@@ -181,10 +200,26 @@ func parseDeclaredService(name string, raw rawServiceDefinition) *DeclaredServic
 	// 解析 environment
 	svc.Environment = parseEnvironment(raw.Environment)
 
-	// 提取服务级变量引用，但排除 image 字段中的变量。
-	// image 相关变化统一走 image_diff / upgrade 路径，不落入 pending_env / rebuild。
+	// 这里通过原始字节流提取，从而涵盖 command、volumes、restart 等所有未显示映射在 struct 的字段。
 	imageVarRefs := extractVarNames(svc.Image)
-	serviceVarRefs := extractServiceVarRefs(raw)
+	
+	var serviceVarRefs []string
+	for _, name := range extractVarNames(string(rawBytes)) {
+		if name == "PROJECT_NAME" {
+			continue
+		}
+		serviceVarRefs = append(serviceVarRefs, name)
+	}
+	
+	// 处理隐式传入的环境变量（如 "- TEST_ENV" 没有等号的形式）
+	for _, envStr := range svc.Environment {
+		if !strings.Contains(envStr, "=") {
+			if envStr != "PROJECT_NAME" {
+				serviceVarRefs = append(serviceVarRefs, envStr)
+			}
+		}
+	}
+	
 	svc.VarRefs = subtractVarRefs(serviceVarRefs, imageVarRefs)
 
 	return svc
@@ -301,49 +336,21 @@ func extractVarNames(template string) []string {
 	return names
 }
 
-// extractServiceVarRefs 从整个 service 配置中提取变量引用。
-// 这里对 rawServiceDefinition 做 YAML 序列化，统一扫描 ports/environment/labels/build 等字段中的 ${VAR} / $VAR。
-func extractServiceVarRefs(raw rawServiceDefinition) []string {
-	data, err := yaml.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-
-	var refs []string
-	for _, name := range extractVarNames(string(data)) {
-		// PROJECT_NAME 主要用于容器命名/项目作用域，不应触发“配置待重建”提示。
-		if name == "PROJECT_NAME" {
-			continue
-		}
-		refs = append(refs, name)
-	}
-	return refs
-}
-
 // subtractVarRefs 计算 all - excluded，并保持原有顺序。
 func subtractVarRefs(all, excluded []string) []string {
 	if len(all) == 0 {
 		return nil
 	}
-	if len(excluded) == 0 {
-		return all
+	excludedMap := make(map[string]struct{})
+	for _, k := range excluded {
+		excludedMap[k] = struct{}{}
 	}
-
-	excludedSet := make(map[string]struct{}, len(excluded))
-	for _, name := range excluded {
-		excludedSet[name] = struct{}{}
-	}
-
-	result := make([]string, 0, len(all))
-	for _, name := range all {
-		if _, ok := excludedSet[name]; ok {
-			continue
+	var result []string
+	for _, k := range all {
+		if _, found := excludedMap[k]; !found {
+			result = append(result, k)
 		}
-		result = append(result, name)
-	}
-
-	if len(result) == 0 {
-		return nil
 	}
 	return result
 }
+

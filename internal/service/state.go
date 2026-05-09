@@ -28,9 +28,10 @@ type ComposeBoardState struct {
 
 // ServiceStateEntry 单个服务上次已生效的状态
 type ServiceStateEntry struct {
-	Image     string            `json:"image,omitempty"` // 已生效的展开镜像
-	Env       map[string]string `json:"env,omitempty"`   // 已生效的 env 变量值
-	UpdatedAt time.Time         `json:"updated_at"`
+	Image       string            `json:"image,omitempty"`        // 已生效的展开镜像
+	Env         map[string]string `json:"env,omitempty"`          // 已生效的 env 变量值
+	ComposeHash string            `json:"compose_hash,omitempty"` // 服务定义的 SHA256（检测 compose 结构变更）
+	UpdatedAt   time.Time         `json:"updated_at"`
 }
 
 // ProfileStateEntry Profile 的配置启用态。
@@ -41,7 +42,7 @@ type ProfileStateEntry struct {
 }
 
 const (
-	stateFileVersion = 2
+	stateFileVersion = 3
 	stateFileName    = ".composeboard-state.json"
 )
 
@@ -199,10 +200,17 @@ func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 		}
 
 		var affected []string
-		// 检查 image 变量中引用的 env 是否变更
+		// 检查变量中引用的 env 是否变更
 		for _, varName := range decl.VarRefs {
 			currentVal := currentEnv[varName]
-			appliedVal := applied.Env[varName]
+			appliedVal, exists := applied.Env[varName]
+			
+			// 兼容处理：v1.0.0 状态中没有 ComposeHash，且提取的变量不全（如遗漏了 volumes 中的变量）。
+			// 如果该变量在旧状态中不存在，直接忽略，避免全量服务误报“配置已变更”。
+			if !exists && applied.ComposeHash == "" {
+				continue
+			}
+
 			if currentVal != appliedVal {
 				affected = append(affected, varName)
 			}
@@ -221,6 +229,47 @@ func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 	}
 	if stateChanged {
 		s.persistRecoveredState(state)
+	}
+	return result
+}
+
+// GetPendingConfigChanges 返回 Compose 配置有结构性变更的服务名集合。
+// 通过对比服务声明的 hash 与上次已生效 hash 来检测。
+func (s *StateManager) GetPendingConfigChanges() map[string]bool {
+	s.mu.RLock()
+	state, err := s.loadStateLocked()
+	if err != nil {
+		s.mu.RUnlock()
+		return nil
+	}
+	s.mu.RUnlock()
+
+	project := s.manager.GetProject()
+	if project == nil {
+		return nil
+	}
+
+	result := make(map[string]bool)
+
+	for _, decl := range project.Services {
+		applied, ok := state.Services[decl.Name]
+		if !ok {
+			// 新服务（state 中不存在），不标记 config_diff（它本身就是 not_deployed）
+			continue
+		}
+
+		// compose_hash 为空视为历史基线，不告警（向后兼容）
+		if applied.ComposeHash == "" {
+			continue
+		}
+
+		if decl.Hash != applied.ComposeHash {
+			result[decl.Name] = true
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
@@ -277,6 +326,9 @@ func (s *StateManager) buildServiceEntry(decl *compose.DeclaredService, envVars 
 	if len(entry.Env) == 0 {
 		entry.Env = nil
 	}
+
+	// 记录已生成的 Hash（检测结构性变更）
+	entry.ComposeHash = decl.Hash
 
 	return entry
 }

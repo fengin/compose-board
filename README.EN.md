@@ -44,7 +44,7 @@ You already have a stable `docker-compose.yml` or `compose.yaml` project, and yo
 | Dashboard      | Project, Compose command, host, Docker, CPU, memory, disk, and service status summary      |
 | Services       | Service list, categories, status, ports, resources, start, stop, restart, upgrade, rebuild |
 | Profiles       | Optional services grouped by profile, with profile-level enable and disable                |
-| Environment    | `.env` table mode and raw text mode, diff confirmation, automatic backup                   |
+| Environment    | `.env` and `docker-compose.yml` editing with built-in code editor, diff confirmation, automatic backup           |
 | Logs           | Service selection, history logs, live logs, auto scroll, reconnect state                   |
 | Web terminal   | Open an interactive shell in a running service container                                   |
 | About          | Version, author homepage, AI Book, and GitHub information                                  |

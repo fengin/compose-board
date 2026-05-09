@@ -20,6 +20,16 @@ import (
 func (h *Handler) GetEnvFile(c *gin.Context) {
 	envPath := filepath.Join(h.ProjectDir, ".env")
 
+	// 文件不存在时返回空内容（支持从零创建）
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		c.JSON(http.StatusOK, gin.H{
+			"entries":   []compose.EnvEntry{},
+			"raw_text":  "",
+			"file_path": envPath,
+		})
+		return
+	}
+
 	entries, err := compose.ParseEnvFile(envPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 .env 失败: " + err.Error()})
@@ -33,6 +43,18 @@ func (h *Handler) GetEnvFile(c *gin.Context) {
 		"raw_text":  string(rawData),
 		"file_path": envPath,
 	})
+}
+
+// DownloadEnvFile GET /api/env/download
+func (h *Handler) DownloadEnvFile(c *gin.Context) {
+	envPath := filepath.Join(h.ProjectDir, ".env")
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		c.String(http.StatusNotFound, ".env 文件不存在")
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename=".env"`)
+	c.Header("Content-Type", "application/octet-stream")
+	c.File(envPath)
 }
 
 // SaveEnvFile POST /api/env
@@ -57,18 +79,21 @@ func (h *Handler) SaveEnvFile(c *gin.Context) {
 
 	envPath := filepath.Join(h.ProjectDir, ".env")
 
-	// 读取旧内容用于备份
+	// 读取旧内容用于备份（文件不存在时跳过备份，直接创建）
 	oldData, err := os.ReadFile(envPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取原文件失败: " + err.Error()})
 		return
 	}
 
-	// 备份
-	backupPath := envPath + fmt.Sprintf(".bak.%s", time.Now().Format("20060102-150405"))
-	if err := os.WriteFile(backupPath, oldData, 0644); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "备份失败: " + err.Error()})
-		return
+	// 备份（仅原文件存在时）
+	backupPath := ""
+	if len(oldData) > 0 {
+		backupPath = envPath + fmt.Sprintf(".bak.%s", time.Now().Format("20060102-150405"))
+		if err := os.WriteFile(backupPath, oldData, 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "备份失败: " + err.Error()})
+			return
+		}
 	}
 
 	// 写入新内容：优先 entries 模式，其次 content 模式

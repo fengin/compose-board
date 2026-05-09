@@ -114,6 +114,10 @@ const API = {
     getEnvFile() { return this.get('/api/env'); },
     saveEnvFile(body) { return this.put('/api/env', body); },
 
+    // === docker-compose.yml 配置 ===
+    getComposeFile() { return this.get('/api/compose-file'); },
+    saveComposeFile(body) { return this.put('/api/compose-file', body); },
+
     // === 设置 ===
     getProjectSettings() { return this.get('/api/settings/project'); },
 

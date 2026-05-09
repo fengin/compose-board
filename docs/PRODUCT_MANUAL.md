@@ -257,6 +257,12 @@ sequenceDiagram
 
 ![环境变量文本模式](ui/环境变量配置-文本模式.png)
 
+Compose 配置修改模式：
+
+支持直接查看和修改 `docker-compose.yml` 内容，同样使用带语法高亮和行号的代码编辑器：
+
+![Compose配置修改](ui/docker-compose修改.png)
+
 保存行为：
 
 1. 保存前展示差异确认。
