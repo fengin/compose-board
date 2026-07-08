@@ -29,7 +29,7 @@ var webFS embed.FS
 
 // 版本信息（编译时通过 -ldflags 注入）
 var (
-	Version   = "1.1.0"
+	Version   = "1.1.1"
 	BuildTime = "unknown"
 )
 

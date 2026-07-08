@@ -99,7 +99,15 @@ func (h *Handler) SaveComposeFile(c *gin.Context) {
 		}
 	}
 
-	// 5. 读取原文件内容备份（文件不存在时跳过备份）
+	// 5. 保存新 Compose 前补齐历史状态中的 compose_hash 基线，避免旧状态无法识别本次配置变更。
+	if h.State != nil {
+		if err := h.State.BackfillMissingComposeHashes(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新配置差异基线失败: " + err.Error()})
+			return
+		}
+	}
+
+	// 6. 读取原文件内容备份（文件不存在时跳过备份）
 	backupPath := ""
 	oldData, err := os.ReadFile(filePath)
 	if err == nil && len(oldData) > 0 {
@@ -110,16 +118,16 @@ func (h *Handler) SaveComposeFile(c *gin.Context) {
 		}
 	}
 
-	// 6. 写入新内容
+	// 7. 写入新内容
 	if err := os.WriteFile(filePath, []byte(req.Content), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
 		return
 	}
 
-	// 7. 热重载声明态
+	// 8. 热重载声明态
 	h.Manager.ReloadCompose()
 
-	// 8. 生成差异摘要
+	// 9. 生成差异摘要
 	newProject := h.Manager.GetProject()
 	var added, removed []string
 	if newProject != nil {

@@ -167,6 +167,62 @@ func (s *StateManager) SetProfileEnabled(profileName string, enabled bool) {
 	log.Printf("[STATE] 已更新 Profile 配置态: %s = %t", profileName, enabled)
 }
 
+// BackfillMissingComposeHashes 用当前已解析的 Compose 声明为缺失 compose_hash 的历史状态补基线。
+// 该方法应在保存新的 Compose 文件之前调用，确保旧版本状态文件能从下一次配置保存开始参与差异检测。
+func (s *StateManager) BackfillMissingComposeHashes() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project := s.manager.GetProject()
+	if project == nil {
+		return nil
+	}
+
+	state, err := s.loadStateLocked()
+	if err != nil {
+		log.Printf("[STATE] 读取状态失败，按当前配置补齐 Compose hash 基线: %v", err)
+		state = s.buildCurrentState()
+	}
+	if state.Services == nil {
+		state.Services = make(map[string]ServiceStateEntry)
+	}
+
+	envVars := s.manager.GetEnvVars()
+	changed := false
+	for _, decl := range project.Services {
+		entry, ok := state.Services[decl.Name]
+		if !ok {
+			if runtimeEntry, recovered := s.manager.BuildRuntimeStateEntry(decl.Name); recovered {
+				runtimeEntry.ComposeHash = decl.Hash
+				s.backfillMissingEnvVars(&runtimeEntry, decl, envVars)
+				state.Services[decl.Name] = runtimeEntry
+			} else {
+				state.Services[decl.Name] = s.buildServiceEntry(decl, envVars)
+			}
+			changed = true
+			continue
+		}
+
+		if entry.ComposeHash == "" {
+			entry.ComposeHash = decl.Hash
+			changed = true
+		}
+		if s.backfillMissingEnvVars(&entry, decl, envVars) {
+			changed = true
+		}
+		state.Services[decl.Name] = entry
+	}
+
+	if !changed {
+		return nil
+	}
+	if err := s.writeStateLocked(state); err != nil {
+		return err
+	}
+	log.Printf("[STATE] 已补齐 Compose hash 基线")
+	return nil
+}
+
 // GetPendingEnvChanges 返回每个服务受影响的未生效变更变量
 func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 	s.mu.RLock()
@@ -204,7 +260,7 @@ func (s *StateManager) GetPendingEnvChanges() map[string][]string {
 		for _, varName := range decl.VarRefs {
 			currentVal := currentEnv[varName]
 			appliedVal, exists := applied.Env[varName]
-			
+
 			// 兼容处理：v1.0.0 状态中没有 ComposeHash，且提取的变量不全（如遗漏了 volumes 中的变量）。
 			// 如果该变量在旧状态中不存在，直接忽略，避免全量服务误报“配置已变更”。
 			if !exists && applied.ComposeHash == "" {
@@ -331,6 +387,27 @@ func (s *StateManager) buildServiceEntry(decl *compose.DeclaredService, envVars 
 	entry.ComposeHash = decl.Hash
 
 	return entry
+}
+
+func (s *StateManager) backfillMissingEnvVars(entry *ServiceStateEntry, decl *compose.DeclaredService, envVars map[string]string) bool {
+	changed := false
+	for _, varName := range decl.VarRefs {
+		val, ok := envVars[varName]
+		if !ok {
+			continue
+		}
+		if entry.Env == nil {
+			entry.Env = make(map[string]string)
+		}
+		if _, exists := entry.Env[varName]; !exists {
+			entry.Env[varName] = val
+			changed = true
+		}
+	}
+	if len(entry.Env) == 0 {
+		entry.Env = nil
+	}
+	return changed
 }
 
 // loadStateLocked 加载状态文件（调用方需持有锁）
