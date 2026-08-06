@@ -41,6 +41,16 @@ func (h *Handler) ApplyUpgrade(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"message": fmt.Sprintf("升级已启动: %s", name)})
 }
 
+// ApplyLocalUpgrade POST /api/services/:name/upgrade-local
+func (h *Handler) ApplyLocalUpgrade(c *gin.Context) {
+	name := c.Param("name")
+	if err := h.Upgrade.ApplyLocalUpgrade(name); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": fmt.Sprintf("本地镜像升级已启动: %s", name)})
+}
+
 // RebuildService POST /api/services/:name/rebuild
 func (h *Handler) RebuildService(c *gin.Context) {
 	name := c.Param("name")

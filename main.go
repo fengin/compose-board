@@ -29,7 +29,7 @@ var webFS embed.FS
 
 // 版本信息（编译时通过 -ldflags 注入）
 var (
-	Version   = "1.1.1"
+	Version   = "1.1.2"
 	BuildTime = "unknown"
 )
 
@@ -112,7 +112,7 @@ func main() {
 	manager.SetDockerClient(dockerCli)
 
 	// 升级管理器
-	upgradeM := service.NewUpgradeManager(manager, cache, executor, stateM)
+	upgradeM := service.NewUpgradeManager(manager, cache, dockerCli, executor, stateM)
 
 	// Profile 管理器
 	profileM := service.NewProfileManager(manager, cache, executor, stateM)
@@ -168,6 +168,7 @@ func main() {
 		authorized.POST("/services/:name/pull", handler.PullImage)
 		authorized.GET("/services/:name/pull-status", handler.GetPullStatus)
 		authorized.POST("/services/:name/upgrade", handler.ApplyUpgrade)
+		authorized.POST("/services/:name/upgrade-local", handler.ApplyLocalUpgrade)
 		authorized.POST("/services/:name/rebuild", handler.RebuildService)
 
 		// Profiles 管理

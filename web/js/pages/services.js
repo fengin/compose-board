@@ -110,6 +110,7 @@ const ServicesPage = {
             :service="upgradeModal.svc"
             @close="closeUpgradeModal"
             @apply="applyUpgrade"
+            @apply-local="applyLocalUpgrade"
         ></upgrade-modal>
     </div>
     `,
@@ -329,14 +330,26 @@ const ServicesPage = {
             this.upgradeModal = { visible: false, svc: null };
         },
 
-        async applyUpgrade(service) {
+        applyUpgrade(service) {
+            this.executeUpgrade(service, false);
+        },
+
+        applyLocalUpgrade(service) {
+            this.executeUpgrade(service, true);
+        },
+
+        async executeUpgrade(service, localOnly) {
             if (!service) return;
 
             const seq = this.beginServiceOp(service, 'upgrade');
             this.closeUpgradeModal();
 
             try {
-                await API.applyUpgrade(service.name);
+                if (localOnly) {
+                    await API.applyLocalUpgrade(service.name);
+                } else {
+                    await API.applyUpgrade(service.name);
+                }
                 Toast.info(this.$t('services.toast.upgrade_started'));
                 this.startAsyncPoll(service.name, seq);
             } catch (e) {

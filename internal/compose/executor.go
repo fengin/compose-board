@@ -29,6 +29,7 @@ type Executor struct {
 type UpOptions struct {
 	ForceRecreate bool     // --force-recreate
 	NoDeps        bool     // --no-deps
+	PullPolicy    string   // --pull <policy>，仅 Compose v2 支持
 	Profiles      []string // --profile xxx
 }
 
@@ -90,8 +91,18 @@ func (e *Executor) DetectCommand() (string, string, error) {
 // Up 执行 docker-compose up -d
 // services 为空时启动全部服务
 func (e *Executor) Up(ctx context.Context, services []string, opts UpOptions) error {
+	args := e.buildUpArgs(services, opts)
+	_, err := e.run(ctx, opts.Profiles, args...)
+	return err
+}
+
+func (e *Executor) buildUpArgs(services []string, opts UpOptions) []string {
 	args := []string{"up", "-d"}
 
+	// Compose v1 的 --pull 是布尔参数，不支持 never；本地升级通过镜像预检兼容 v1。
+	if opts.PullPolicy != "" && e.detected == "docker compose" {
+		args = append(args, "--pull", opts.PullPolicy)
+	}
 	if opts.ForceRecreate {
 		args = append(args, "--force-recreate")
 	}
@@ -100,8 +111,7 @@ func (e *Executor) Up(ctx context.Context, services []string, opts UpOptions) er
 	}
 
 	args = append(args, services...)
-	_, err := e.run(ctx, opts.Profiles, args...)
-	return err
+	return args
 }
 
 // Pull 执行 docker-compose pull

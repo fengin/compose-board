@@ -103,6 +103,7 @@ const API = {
     pullImage(name) { return this.post(`/api/services/${name}/pull`); },
     getPullStatus(name) { return this.get(`/api/services/${name}/pull-status`); },
     applyUpgrade(name) { return this.post(`/api/services/${name}/upgrade`); },
+    applyLocalUpgrade(name) { return this.post(`/api/services/${name}/upgrade-local`); },
     rebuildService(name) { return this.post(`/api/services/${name}/rebuild`); },
 
     // === Profiles ===

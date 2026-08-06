@@ -459,7 +459,7 @@ Profile 操作参数：
 
 ## 11. 升级与重建
 
-`internal/service/upgrade.go` 负责编排 `pull`、`upgrade` 和 `rebuild`。
+`internal/service/upgrade.go` 负责编排 `pull`、在线升级、本地镜像升级和 `rebuild`。
 
 ```mermaid
 sequenceDiagram
@@ -477,10 +477,12 @@ sequenceDiagram
     API-->>UI: pulling / success / failed
     UI->>API: POST /api/services/:name/upgrade
     API->>U: ApplyUpgrade(name)
-    U->>E: up -d --no-deps --force-recreate name
+    U->>E: up -d --no-deps name
     U->>S: UpdateServiceState(name)
     U->>C: RefreshNow
 ```
+
+本地镜像升级使用独立的 `/api/services/:name/upgrade-local` 接口。业务层先通过 Docker Engine API 按完整镜像引用检查本地缓存；镜像存在时，Compose v2 执行 `up -d --pull never --no-deps <service>`。Compose v1 不支持 `--pull never`，因此只执行镜像预检并沿用 `up -d --no-deps <service>`。
 
 重建用于应用 `.env` 变更，执行方式同样是 `up -d --no-deps --force-recreate <service>`，并更新状态文件基线。
 
@@ -709,6 +711,7 @@ Shell 按目标容器 OS 探测，与宿主机平台无关，探测结果按 `co
 | POST | `/api/services/:name/pull`        | 拉取服务镜像         |
 | GET  | `/api/services/:name/pull-status` | 查询镜像拉取状态       |
 | POST | `/api/services/:name/upgrade`     | 应用升级           |
+| POST | `/api/services/:name/upgrade-local` | 使用本地镜像升级     |
 | POST | `/api/services/:name/rebuild`     | 重建服务           |
 | GET  | `/api/profiles`                   | Profile 列表     |
 | POST | `/api/profiles/:name/enable`      | 启用 Profile     |

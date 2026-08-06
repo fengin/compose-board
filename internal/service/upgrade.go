@@ -24,22 +24,28 @@ type PullStatus struct {
 	Time    time.Time `json:"-"`
 }
 
+type imageChecker interface {
+	ImageExists(ctx context.Context, imageRef string) (bool, error)
+}
+
 // UpgradeManager 升级管理器
 type UpgradeManager struct {
-	manager  *ServiceManager
-	cache    *docker.ContainerCache
-	executor *compose.Executor
-	stateM   *StateManager
+	manager      *ServiceManager
+	cache        *docker.ContainerCache
+	imageChecker imageChecker
+	executor     *compose.Executor
+	stateM       *StateManager
 
 	pullStatusMu sync.Mutex
 	pullStatuses map[string]*PullStatus
 }
 
 // NewUpgradeManager 创建升级管理器
-func NewUpgradeManager(manager *ServiceManager, cache *docker.ContainerCache, executor *compose.Executor, stateM *StateManager) *UpgradeManager {
+func NewUpgradeManager(manager *ServiceManager, cache *docker.ContainerCache, dockerCli *docker.Client, executor *compose.Executor, stateM *StateManager) *UpgradeManager {
 	return &UpgradeManager{
 		manager:      manager,
 		cache:        cache,
+		imageChecker: dockerCli,
 		executor:     executor,
 		stateM:       stateM,
 		pullStatuses: make(map[string]*PullStatus),
@@ -120,15 +126,58 @@ func (u *UpgradeManager) ApplyUpgrade(serviceName string) error {
 		}
 	}
 
-	log.Printf("[UPGRADE] %s: 应用升级", serviceName)
+	return u.startUpgrade(serviceName, compose.UpOptions{NoDeps: true}, "应用升级")
+}
+
+// ApplyLocalUpgrade 使用本地已有的目标镜像升级，不访问镜像仓库。
+func (u *UpgradeManager) ApplyLocalUpgrade(serviceName string) error {
+	project := u.manager.GetProject()
+	if project == nil {
+		return &UpgradeError{Service: serviceName, Message: "Compose 项目未初始化"}
+	}
+	decl, ok := project.Services[serviceName]
+	if !ok {
+		return &UpgradeError{Service: serviceName, Message: "服务不存在"}
+	}
+	if decl.ImageSource == "build" {
+		return &UpgradeError{Service: serviceName, Message: "build 类型服务不支持镜像升级"}
+	}
+
+	targetImage := compose.ExpandVars(decl.Image, u.manager.GetEnvVars())
+	if targetImage == "" {
+		return &UpgradeError{Service: serviceName, Message: "服务未声明可升级的目标镜像"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if u.imageChecker == nil {
+		return &UpgradeError{Service: serviceName, Message: "Docker 客户端未初始化"}
+	}
+	exists, err := u.imageChecker.ImageExists(ctx, targetImage)
+	if err != nil {
+		return &UpgradeError{Service: serviceName, Message: err.Error()}
+	}
+	if !exists {
+		return &UpgradeError{
+			Service: serviceName,
+			Message: "本地未找到目标镜像 " + targetImage + "，请先执行 docker load 并确认镜像名称和标签一致",
+		}
+	}
+
+	return u.startUpgrade(serviceName, compose.UpOptions{
+		NoDeps:     true,
+		PullPolicy: "never",
+	}, "使用本地镜像升级")
+}
+
+func (u *UpgradeManager) startUpgrade(serviceName string, opts compose.UpOptions, action string) error {
+	log.Printf("[UPGRADE] %s: %s", serviceName, action)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		err := u.executor.Up(ctx, []string{serviceName}, compose.UpOptions{
-			NoDeps: true, // --no-deps：不拉起依赖
-		})
+		err := u.executor.Up(ctx, []string{serviceName}, opts)
 		if err != nil {
 			log.Printf("[UPGRADE] 失败 %s: %v", serviceName, err)
 			return

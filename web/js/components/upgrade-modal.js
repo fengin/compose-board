@@ -41,7 +41,7 @@ const UpgradeModal = {
                     <div v-if="pullStatus === 'success'" style="background:#FFFBEB;padding:12px 16px;border-radius:var(--radius);font-size:0.85rem;color:#92400E;margin-bottom:16px">
                         ⚠️ {{ $t('services.modal.upgrade_warning') }}
                     </div>
-                    <div class="btn-group" style="margin-top:20px">
+                    <div class="btn-group" style="margin-top:20px;flex-wrap:wrap">
                         <button class="btn btn-ghost" @click="$emit('close')">{{ $t('common.cancel') }}</button>
                         <button
                             v-if="pullStatus === 'none' || pullStatus === 'failed'"
@@ -50,6 +50,15 @@ const UpgradeModal = {
                             :disabled="pulling"
                         >
                             🔽 {{ $t('services.actions.pull') }}
+                        </button>
+                        <button
+                            v-if="pullStatus === 'none' || pullStatus === 'failed'"
+                            class="btn btn-outline"
+                            :title="$t('services.modal.local_upgrade_hint')"
+                            @click="$emit('apply-local', service)"
+                            :disabled="pulling"
+                        >
+                            ⬆ {{ $t('services.actions.local_upgrade') }}
                         </button>
                         <button
                             v-if="pullStatus === 'success'"
@@ -68,7 +77,7 @@ const UpgradeModal = {
         visible: Boolean,
         service: { type: Object, default: null }
     },
-    emits: ['close', 'apply'],
+    emits: ['close', 'apply', 'apply-local'],
     data() {
         return {
             pullStatus: 'none',

@@ -1,9 +1,18 @@
 package docker
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestBuildContainerLogsPath_IncludesSince(t *testing.T) {
 	path := buildContainerLogsPath(
@@ -35,5 +44,46 @@ func TestSelectBestContainer_PrefersRunningThenNewest(t *testing.T) {
 
 	if best.ID != "running-new" {
 		t.Fatalf("best container = %q, want %q", best.ID, "running-new")
+	}
+}
+
+func TestClientImageExists_UsesReferenceFilter(t *testing.T) {
+	const imageRef = "192.168.3.48:5000/inxvision/rule-engine:0.0.1.20260806.xian"
+	client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		filters := req.URL.Query().Get("filters")
+		if !strings.Contains(filters, imageRef) {
+			t.Fatalf("filters = %q, want image ref %q", filters, imageRef)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`[{"Id":"sha256:test"}]`)),
+			Header:     make(http.Header),
+		}, nil
+	})}}
+
+	exists, err := client.ImageExists(context.Background(), imageRef)
+	if err != nil {
+		t.Fatalf("ImageExists() error = %v", err)
+	}
+	if !exists {
+		t.Fatal("ImageExists() = false, want true")
+	}
+}
+
+func TestClientImageExists_ReturnsFalseForEmptyResult(t *testing.T) {
+	client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`[]`)),
+			Header:     make(http.Header),
+		}, nil
+	})}}
+
+	exists, err := client.ImageExists(context.Background(), "demo/app:1.0.0")
+	if err != nil {
+		t.Fatalf("ImageExists() error = %v", err)
+	}
+	if exists {
+		t.Fatal("ImageExists() = true, want false")
 	}
 }

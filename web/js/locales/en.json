@@ -75,6 +75,7 @@
       "rebuild": "Rebuild",
       "upgrade": "Upgrade",
       "pull": "Pull Image",
+      "local_upgrade": "Local Upgrade",
       "view_env": "ENV",
       "view_logs": "LOG",
       "open_terminal": "Terminal"
@@ -133,6 +134,7 @@
       "current_version": "Current Version",
       "target_version": "Target Version",
       "pull_hint": "Pulling image will not affect the currently running service",
+      "local_upgrade_hint": "Upgrade with the target image already available on this server without accessing a registry; the service will be briefly interrupted",
       "upgrade_warning": "Upgrading will recreate the container, causing a brief service interruption",
       "rebuild_warning": "Rebuilding will recreate the container with new config, causing a brief service interruption",
       "changed_vars": "Changed Variables",

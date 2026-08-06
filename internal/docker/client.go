@@ -107,6 +107,36 @@ func (c *Client) GetDockerVersion(ctx context.Context) (string, string, error) {
 	return ver.Version, ver.APIVersion, nil
 }
 
+// ImageExists 检查完整镜像引用是否已存在于本地 Docker 镜像缓存。
+func (c *Client) ImageExists(ctx context.Context, imageRef string) (bool, error) {
+	imageRef = strings.TrimSpace(imageRef)
+	if imageRef == "" {
+		return false, fmt.Errorf("镜像引用不能为空")
+	}
+
+	filters, err := json.Marshal(map[string][]string{"reference": {imageRef}})
+	if err != nil {
+		return false, fmt.Errorf("构建镜像过滤条件失败: %w", err)
+	}
+	path := "/images/json?filters=" + url.QueryEscape(string(filters))
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return false, fmt.Errorf("查询本地镜像失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("查询本地镜像失败: %s", strings.TrimSpace(string(body)))
+	}
+
+	var images []json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&images); err != nil {
+		return false, fmt.Errorf("解析本地镜像列表失败: %w", err)
+	}
+	return len(images) > 0, nil
+}
+
 // ListContainers 获取当前项目的全部容器
 // 使用 com.docker.compose.project 标签原生过滤
 func (c *Client) ListContainers(ctx context.Context) ([]ContainerInfo, error) {

@@ -233,10 +233,12 @@ sequenceDiagram
     API-->>UI: pulling / success / failed
     User->>UI: 确认应用升级
     UI->>API: POST /api/services/:name/upgrade
-    API->>Compose: docker compose up -d --no-deps --force-recreate <service>
+    API->>Compose: docker compose up -d --no-deps <service>
     API->>Docker: 刷新服务状态
     API-->>UI: 升级完成
 ```
+
+目标镜像已通过 `docker load` 等方式导入服务器时，可选择“本地升级”。ComposeBoard 会先确认完整目标镜像已存在，再执行 `docker compose up -d --pull never --no-deps <service>`；镜像不存在时立即提示，不会重建当前容器。
 
 限制：
 
