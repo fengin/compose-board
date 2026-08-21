@@ -209,7 +209,7 @@ node scripts\check-i18n-keys.js
 ```
 
 ```powershell
-$env:GOCACHE = "D:\code\work\deploy\.gocache-compose-board"
+$env:GOCACHE = (Join-Path (Get-Location) '.gocache-compose-board')
 go test ./...
 Remove-Item Env:\GOCACHE
 ```
