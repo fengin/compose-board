@@ -2,11 +2,28 @@ package service
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/fengin/composeboard/internal/compose"
 )
+
+func TestOnlineUpgradeOptions_ForceRecreatesWithoutDependencies(t *testing.T) {
+	got := onlineUpgradeOptions()
+	want := compose.UpOptions{ForceRecreate: true, NoDeps: true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("onlineUpgradeOptions() = %+v, want %+v", got, want)
+	}
+}
+
+func TestLocalUpgradeOptions_RemainsPullNeverWithoutForceRecreate(t *testing.T) {
+	got := localUpgradeOptions()
+	want := compose.UpOptions{NoDeps: true, PullPolicy: "never"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("localUpgradeOptions() = %+v, want %+v", got, want)
+	}
+}
 
 type missingImageChecker struct {
 	checkedRef string

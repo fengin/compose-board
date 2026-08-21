@@ -7,7 +7,7 @@
 | 项         | 参数                                        |
 | --------- | ----------------------------------------- |
 | 产品名称      | ComposeBoard                              |
-| 当前版本默认值   | `1.1.2`，可通过编译 `-ldflags` 注入               |
+| 当前版本默认值   | `1.1.3`，可通过编译 `-ldflags` 注入               |
 | 二进制名      | `composeboard`                            |
 | Go module | `github.com/fengin/composeboard`          |
 | 开源仓库      | `https://github.com/fengin/compose-board` |
@@ -184,9 +184,9 @@ JWT：
 | POST | `/api/services/:name/stop`        | 停止         |
 | POST | `/api/services/:name/restart`     | 重启         |
 | GET  | `/api/services/:name/env`         | 运行时环境变量    |
-| POST | `/api/services/:name/pull`        | 拉取镜像       |
+| POST | `/api/services/:name/pull`        | 拉取声明镜像；标签未变时重新拉取当前镜像 |
 | GET  | `/api/services/:name/pull-status` | 拉取状态       |
-| POST | `/api/services/:name/upgrade`     | 应用升级       |
+| POST | `/api/services/:name/upgrade`     | 强制重建单个服务并应用已拉取镜像 |
 | POST | `/api/services/:name/upgrade-local` | 使用本地镜像升级 |
 | POST | `/api/services/:name/rebuild`     | 重建         |
 | GET  | `/api/profiles`                   | Profile 列表 |
@@ -311,7 +311,7 @@ SSE 事件：
 
 ## 9. 性能测试参数
 
-以下数据来自开发过程性能测试报告，测试日期为 2026-04-24，版本为 v1.1.2，测试人为凌封。数据用于评估 ComposeBoard 在典型单机 Compose 项目中的资源占用和响应能力，实际结果会受硬件、Docker 服务数量、容器状态、磁盘性能和网络环境影响。
+以下数据来自开发过程性能测试报告，测试日期为 2026-04-24，当前文档适用版本为 v1.1.3，测试人为凌封。数据用于评估 ComposeBoard 在典型单机 Compose 项目中的资源占用和响应能力，实际结果会受硬件、Docker 服务数量、容器状态、磁盘性能和网络环境影响。
 
 ### 9.1 测试环境
 

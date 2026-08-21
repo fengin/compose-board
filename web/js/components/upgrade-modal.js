@@ -23,10 +23,14 @@ const UpgradeModal = {
                     </div>
                     <div style="margin-bottom:16px">
                         <div class="form-label">{{ $t('services.modal.target_version') }}</div>
-                        <div class="mono" style="padding:8px 14px;background:#ECFDF5;border-radius:var(--radius);font-size:0.9rem;color:#065F46;font-weight:600">{{ targetVer }}</div>
+                        <div
+                            class="mono"
+                            style="padding:8px 14px;border-radius:var(--radius);font-size:0.9rem;font-weight:600"
+                            :style="targetVersionStyle"
+                        >{{ targetVer }}</div>
                     </div>
                     <div v-if="pullStatus === 'none'" style="background:#FFFBEB;padding:12px 16px;border-radius:var(--radius);font-size:0.85rem;color:#92400E;margin-bottom:16px">
-                        ℹ️ {{ $t('services.modal.pull_hint') }}
+                        ℹ️ {{ pullHint }}
                     </div>
                     <div v-if="pullStatus === 'pulling'" style="display:flex;align-items:center;gap:10px;padding:14px;background:var(--color-bg-muted);border-radius:var(--radius);margin-bottom:16px">
                         <div class="loading-spinner" style="width:18px;height:18px;flex-shrink:0"></div>
@@ -92,8 +96,24 @@ const UpgradeModal = {
         currentVer() {
             return this.service ? ServicesRules.extractVersion(this.service.running_image) : '—';
         },
+        hasImageDiff() {
+            return !!(this.service && this.service.image_diff);
+        },
         targetVer() {
-            return this.service ? ServicesRules.extractVersion(this.service.declared_image) : '—';
+            if (!this.service) return '—';
+            return this.hasImageDiff
+                ? ServicesRules.extractVersion(this.service.declared_image)
+                : this.$t('services.modal.no_version_change');
+        },
+        targetVersionStyle() {
+            return this.hasImageDiff
+                ? { background: '#ECFDF5', color: '#065F46' }
+                : { background: 'var(--color-bg-muted)', color: 'var(--color-fg-secondary)' };
+        },
+        pullHint() {
+            return this.$t(this.hasImageDiff
+                ? 'services.modal.pull_hint'
+                : 'services.modal.repull_hint');
         }
     },
     watch: {

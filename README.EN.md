@@ -29,7 +29,7 @@ You already have a stable `docker-compose.yml` or `compose.yaml` project, and yo
 | Compose-first view        | Uses the Compose declaration as the primary view, so undeployed services are still visible                           |
 | Native Docker labels      | Identifies containers through `com.docker.compose.project` and `com.docker.compose.service` instead of name guessing |
 | Profile operations        | Detects Compose Profiles and supports group enable/disable workflows                                                 |
-| Upgrade and rebuild hints | Detects image differences, supports registry pull or local-image upgrades, and tracks `.env` changes for rebuilds       |
+| Upgrade and rebuild hints | Keeps upgrades available for deployed image services, supports same-tag repull with forced recreation or local-image upgrades, and tracks `.env` changes for rebuilds |
 | Real-time logs            | Supports historical logs and SSE live streams, with container replacement tracking                                   |
 | Web terminal              | Connects to running containers through Docker Exec, WebSocket, and xterm.js                                          |
 | Low footprint             | Around 20 MB RSS while idle and around 30 MB RSS during active use in local tests                                    |

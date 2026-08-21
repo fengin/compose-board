@@ -67,7 +67,7 @@ const ServiceTable = {
                                 v-for="action in row.actions"
                                 :key="action"
                                 class="act-btn"
-                                :class="actionClass(action)"
+                                :class="actionClass(action, row)"
                                 @click="$emit('action', { service: row.service, type: action })"
                             >
                                 {{ actionIcon(action) }} {{ actionLabel(action) }}
@@ -90,7 +90,10 @@ const ServiceTable = {
             const translated = this.$t(key);
             return translated !== key ? translated : status;
         },
-        actionClass(type) {
+        actionClass(type, row) {
+            if (type === 'upgrade') {
+                return row && row.display && row.display.hasImageDiff ? 'act-upgrade' : 'act-default';
+            }
             const classes = {
                 stop: 'act-danger',
                 start: 'act-primary',
@@ -98,7 +101,6 @@ const ServiceTable = {
                 'show-env': 'act-default',
                 'go-logs': 'act-default',
                 'go-terminal': 'act-default',
-                upgrade: 'act-upgrade',
                 rebuild: 'act-rebuild'
             };
             return classes[type] || 'act-default';

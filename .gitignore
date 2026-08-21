@@ -23,6 +23,7 @@ desktop.ini
 
 # === 项目特定 ===
 composeboard
+composeboard_linux_*
 composeboard.log
 debug*.log
 config.yaml

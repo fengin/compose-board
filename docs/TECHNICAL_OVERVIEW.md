@@ -368,10 +368,10 @@ flowchart TB
 
 | 当前状态           | 显示按钮                                                                                                        |
 | -------------- | ----------------------------------------------------------------------------------------------------------- |
-| `running`      | `重启`、`停止`、`查看环境变量`、`查看日志`、`终端`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`  |
-| `exited`       | `启动`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`            |
-| `created`      | `启动`、`重启`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`       |
-| `restarting`   | `重启`、`停止`、`查看环境变量`、`查看日志`；若 `image_diff=true` 追加 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`       |
+| `running`      | `重启`、`停止`、`查看环境变量`、`查看日志`、`终端`；registry 镜像服务显示 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`  |
+| `exited`       | `启动`、`查看环境变量`、`查看日志`；registry 镜像服务显示 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`            |
+| `created`      | `启动`、`重启`、`查看环境变量`、`查看日志`；registry 镜像服务显示 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`       |
+| `restarting`   | `重启`、`停止`、`查看环境变量`、`查看日志`；registry 镜像服务显示 `升级`；若 `pending_env.length>0 && !image_diff` 追加 `重建`       |
 | `not_deployed` | 固定 `image:` 服务显示 `启动`；已启用 Profile 下的 `image:` 可选服务显示 `启动`；未启用 Profile 下的可选服务不显示单服务启动按钮；`build:` 服务不显示面板启动按钮 |
 
 设计说明：
@@ -381,6 +381,8 @@ flowchart TB
 - `查看日志` 对所有 `status != "not_deployed"` 的服务可见，便于排查异常。
 - Web 终端只对 `running` 服务可见，与后端终端入口校验一致。
 - `startup_warning` 只影响状态列告警展示，不参与按钮隐藏和 loading 完成判定。
+- `image_diff` 控制版本变化提示、升级按钮强调样式和升级完成判据，不再控制升级按钮可见性；无版本变化时升级按钮复用普通操作样式。
+- 在线升级在拉取成功后执行 `up -d --force-recreate --no-deps <service>`，保证同标签镜像重新发布后也替换容器；本地升级继续使用原有 `--pull never` 策略，不随此规则改变。
 
 ### 10.5 `startup_warning` 运行态告警
 
@@ -544,6 +546,8 @@ type EnvEntry struct {
 | ---- | ---------------------- | ---- |
 | 原始文本 | `{ "content": "..." }` | 文本模式 |
 | 行级条目 | `{ "entries": [...] }` | 表格模式 |
+
+前端表格模式为每个变量保留 `raw`、当前逻辑值和进入表格时的值基线。生成差异与保存内容时，值未变化的变量直接复用 `raw`；只有实际修改的变量行才按原有单双引号风格重建。文本模式切回表格模式时会以当前文本重新建立逐行基线，避免格式规范化被误判为配置变化。
 
 保存前会自动备份旧文件，备份名为：
 

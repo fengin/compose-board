@@ -9,6 +9,134 @@
  *   操作栏: [Tab切换]  [文件路径]  [刷新] [保存]
  *   内容区: 各 Tab 的编辑内容
  */
+const EnvEditorUtils = {
+    normalizeValue(value) {
+        return value == null ? '' : String(value);
+    },
+
+    getQuoteStyle(value) {
+        if (value.length >= 2 &&
+            ((value[0] === '"' && value[value.length - 1] === '"') ||
+             (value[0] === "'" && value[value.length - 1] === "'"))) {
+            return value[0];
+        }
+        return '';
+    },
+
+    getRawValue(raw) {
+        const trimmed = (raw || '').trim();
+        const idx = trimmed.indexOf('=');
+        return idx > 0 ? trimmed.substring(idx + 1).trim() : '';
+    },
+
+    withBaseline(entry) {
+        if (entry.type !== 'variable') {
+            return { ...entry };
+        }
+
+        const value = this.normalizeValue(entry.value);
+        return {
+            ...entry,
+            value,
+            _originalValue: value,
+            _quoteStyle: this.getQuoteStyle(this.getRawValue(entry.raw))
+        };
+    },
+
+    withBaselines(entries) {
+        return entries.map(entry => this.withBaseline(entry));
+    },
+
+    parseEntries(content) {
+        const lines = content.split('\n');
+        if (lines[lines.length - 1] === '') {
+            lines.pop();
+        }
+
+        return lines.map((line, index) => {
+            const trimmed = line.trim();
+            const lineNumber = index + 1;
+
+            if (!trimmed) {
+                return { type: 'blank', raw: line, line: lineNumber };
+            }
+            if (trimmed.startsWith('#')) {
+                return { type: 'comment', raw: line, line: lineNumber };
+            }
+
+            const separator = trimmed.indexOf('=');
+            if (separator <= 0) {
+                return { type: 'comment', raw: line, line: lineNumber };
+            }
+
+            const rawValue = trimmed.substring(separator + 1).trim();
+            const quoteStyle = this.getQuoteStyle(rawValue);
+            const value = quoteStyle ? rawValue.substring(1, rawValue.length - 1) : rawValue;
+            return {
+                type: 'variable',
+                key: trimmed.substring(0, separator).trim(),
+                value,
+                raw: line,
+                line: lineNumber,
+                _originalValue: value,
+                _quoteStyle: quoteStyle
+            };
+        });
+    },
+
+    renderEntry(entry) {
+        if (entry.type !== 'variable') {
+            return entry.raw || '';
+        }
+
+        const value = this.normalizeValue(entry.value);
+        if (value === this.normalizeValue(entry._originalValue) && entry.raw !== '') {
+            return entry.raw;
+        }
+
+        const quoteStyle = entry._quoteStyle || this.getQuoteStyle(this.getRawValue(entry.raw));
+        const renderedValue = quoteStyle ? `${quoteStyle}${value}${quoteStyle}` : value;
+        return `${entry.key}=${renderedValue}`;
+    },
+
+    buildContent(entries) {
+        if (entries.length === 0) {
+            return '';
+        }
+        return entries.map(entry => this.renderEntry(entry)).join('\n') + '\n';
+    },
+
+    materializeEntries(entries) {
+        return entries.map(entry => {
+            if (entry.type !== 'variable') {
+                return { ...entry };
+            }
+            return { ...entry, raw: this.renderEntry(entry) };
+        });
+    },
+
+    buildDiff(oldContent, newContent) {
+        const oldLines = oldContent.split('\n').filter(line => line.trim());
+        const newLines = newContent.split('\n').filter(line => line.trim());
+        const lines = [];
+        const oldSet = new Set(oldLines);
+        const newSet = new Set(newLines);
+
+        for (const line of oldLines) {
+            if (!newSet.has(line)) {
+                lines.push({ type: 'remove', text: line });
+            }
+        }
+        for (const line of newLines) {
+            if (!oldSet.has(line)) {
+                lines.push({ type: 'add', text: line });
+            }
+        }
+
+        return lines;
+    }
+};
+
 const EnvPage = {
     template: `
     <div>
@@ -352,12 +480,7 @@ const EnvPage = {
             this.env.loading = true;
             try {
                 const data = await API.getEnvFile();
-                this.env.entries = (data.entries || []).map(e => {
-                    if (e.type === 'variable') {
-                        return { ...e, _originalValue: e.value };
-                    }
-                    return e;
-                });
+                this.env.entries = EnvEditorUtils.withBaselines(data.entries || []);
                 this.env.rawText = data.raw_text || '';
                 this.env.originalRawText = this.env.rawText;
                 this.env.filePath = data.file_path || '';
@@ -376,56 +499,30 @@ const EnvPage = {
             if (this.env.editMode === 'raw') {
                 return this.env.rawText;
             }
-            const lines = [];
-            for (const entry of this.env.entries) {
-                if (entry.type === 'variable') {
-                    lines.push(`${entry.key}=${entry.value}`);
-                } else {
-                    lines.push(entry.raw || '');
-                }
-            }
-            return lines.join('\n') + '\n';
+            return EnvEditorUtils.buildContent(this.env.entries);
         },
         showEnvDiffPreview() {
             const newContent = this.getEnvCurrentContent();
-            const oldLines = this.env.originalRawText.split('\n').filter(l => l.trim());
-            const newLines = newContent.split('\n').filter(l => l.trim());
-
-            const lines = [];
-            const oldSet = new Set(oldLines);
-            const newSet = new Set(newLines);
-
-            for (const l of oldLines) {
-                if (!newSet.has(l)) {
-                    lines.push({ type: 'remove', text: l });
-                }
-            }
-            for (const l of newLines) {
-                if (!oldSet.has(l)) {
-                    lines.push({ type: 'add', text: l });
-                }
-            }
-
-            this.env.diffModal = { visible: true, lines };
+            this.env.diffModal = {
+                visible: true,
+                lines: EnvEditorUtils.buildDiff(this.env.originalRawText, newContent)
+            };
         },
         async saveEnv() {
             this.env.saving = true;
             try {
+                const currentContent = this.getEnvCurrentContent();
                 if (this.env.editMode === 'table') {
-                    const entries = this.env.entries.map(e => {
-                        if (e.type === 'variable' && e.value !== e._originalValue) {
-                            return { ...e, raw: `${e.key}=${e.value}` };
-                        }
-                        return e;
-                    });
+                    const entries = EnvEditorUtils.materializeEntries(this.env.entries);
                     await API.saveEnvFile({ entries });
                 } else {
                     await API.saveEnvFile({ content: this.env.rawText });
                 }
                 this.env.diffModal.visible = false;
-                this.env.originalRawText = this.getEnvCurrentContent();
+                this.env.entries = EnvEditorUtils.parseEntries(currentContent);
+                this.env.originalRawText = currentContent;
                 this.env.hasChanges = false;
-                this.env.rawText = this.env.originalRawText;
+                this.env.rawText = currentContent;
                 this.env.fileNotExist = false;
                 this.env.showSaveTip = true;
             } catch (e) {
@@ -514,31 +611,7 @@ const EnvPage = {
                 this.env.rawText = this.getEnvCurrentContent();
             } else {
                 // 原文 → 表格：重新解析
-                const lines = this.env.rawText.split('\n');
-                this.env.entries = [];
-                let lineNum = 0;
-                for (const line of lines) {
-                    lineNum++;
-                    const trimmed = line.trim();
-                    if (!trimmed) {
-                        this.env.entries.push({ type: 'blank', raw: line, line: lineNum });
-                    } else if (trimmed.startsWith('#')) {
-                        this.env.entries.push({ type: 'comment', raw: line, line: lineNum });
-                    } else {
-                        const idx = trimmed.indexOf('=');
-                        if (idx > 0) {
-                            this.env.entries.push({
-                                type: 'variable',
-                                key: trimmed.substring(0, idx).trim(),
-                                value: trimmed.substring(idx + 1).trim(),
-                                raw: line,
-                                line: lineNum
-                            });
-                        } else {
-                            this.env.entries.push({ type: 'comment', raw: line, line: lineNum });
-                        }
-                    }
-                }
+                this.env.entries = EnvEditorUtils.parseEntries(this.env.rawText);
             }
         }
     },

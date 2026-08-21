@@ -49,6 +49,7 @@ const ServicesRules = {
                 showBuildBadge: service.image_source === 'build',
                 currentVersion: this.extractVersion(currentImage),
                 nextVersion: hasImageDiff ? this.extractVersion(service.declared_image || '') : '',
+                hasImageDiff,
                 hasEnvDiff,
                 hasConfigDiff,
                 envChangedTitle: hasEnvDiff ? pendingEnv.join(', ') : '',
@@ -93,7 +94,8 @@ const ServicesRules = {
             actions.push('go-terminal');
         }
 
-        if (status !== 'not_deployed' && service.image_diff) {
+        // 已部署的 registry 服务始终提供升级入口，支持同标签镜像重新拉取并重建。
+        if (status !== 'not_deployed' && service.image_source === 'registry') {
             actions.push('upgrade');
         }
         if (status !== 'not_deployed' && service.pending_env && service.pending_env.length > 0 && !service.image_diff) {

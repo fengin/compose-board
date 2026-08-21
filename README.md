@@ -29,7 +29,7 @@ ComposeBoard 不是 Kubernetes 平台，也不是全功能服务器面板。它�
 | Compose 声明态视图  | 以 Compose 文件声明为主视图，未部署服务也能展示                                                 |
 | 原生 Docker 标签识别 | 使用 `com.docker.compose.project` / `com.docker.compose.service` 定位容器，不依赖服务名猜测 |
 | Profile 分组运维   | 识别 Compose Profiles，支持整组启用、停用和状态展示                                           |
-| 镜像升级与配置重建      | 对 `image:` 服务检测镜像差异，支持在线拉取或使用本地已有镜像升级，对 `.env` 变更提示相关服务重建                 |
+| 镜像升级与配置重建      | 已部署的 `image:` 服务可随时在线拉取或使用本地镜像升级；支持同标签镜像重新拉取并强制重建，对 `.env` 变更提示相关服务重建 |
 | 实时日志           | 支持历史日志与 SSE 实时日志流，服务重建后可继续跟随新容器                                              |
 | Web 终端         | 基于 Docker Exec + WebSocket + xterm.js 直连运行中容器                                |
 | 低资源占用          | 实测休眠约 20 MB RSS，活跃约 30 MB RSS，适合低配服务器和边缘节点                                   |

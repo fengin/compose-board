@@ -126,7 +126,7 @@ func (u *UpgradeManager) ApplyUpgrade(serviceName string) error {
 		}
 	}
 
-	return u.startUpgrade(serviceName, compose.UpOptions{NoDeps: true}, "应用升级")
+	return u.startUpgrade(serviceName, onlineUpgradeOptions(), "应用升级")
 }
 
 // ApplyLocalUpgrade 使用本地已有的目标镜像升级，不访问镜像仓库。
@@ -164,10 +164,21 @@ func (u *UpgradeManager) ApplyLocalUpgrade(serviceName string) error {
 		}
 	}
 
-	return u.startUpgrade(serviceName, compose.UpOptions{
+	return u.startUpgrade(serviceName, localUpgradeOptions(), "使用本地镜像升级")
+}
+
+func onlineUpgradeOptions() compose.UpOptions {
+	return compose.UpOptions{
+		ForceRecreate: true,
+		NoDeps:        true,
+	}
+}
+
+func localUpgradeOptions() compose.UpOptions {
+	return compose.UpOptions{
 		NoDeps:     true,
 		PullPolicy: "never",
-	}, "使用本地镜像升级")
+	}
 }
 
 func (u *UpgradeManager) startUpgrade(serviceName string, opts compose.UpOptions, action string) error {
