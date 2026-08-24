@@ -20,6 +20,7 @@ type Config struct {
 	Project    ProjectConfig    `yaml:"project"`
 	Auth       AuthConfig       `yaml:"auth"`
 	Compose    ComposeConfig    `yaml:"compose"`
+	FileLogs   FileLogsConfig   `yaml:"file_logs"`
 	Hooks      HooksConfig      `yaml:"hooks"`
 	Extensions ExtensionsConfig `yaml:"extensions"`
 }
@@ -46,6 +47,32 @@ type AuthConfig struct {
 // ComposeConfig Compose 命令配置
 type ComposeConfig struct {
 	Command string `yaml:"command"` // "auto" | "docker-compose" | "docker compose"，缺省 auto
+}
+
+// FileLogsConfig 宿主机文件日志能力配置。
+// 未显式启用时不注册任何可访问根目录，保持旧版本行为不变。
+type FileLogsConfig struct {
+	Enabled            bool                   `yaml:"enabled"`
+	AllowedBases       []FileLogBaseConfig    `yaml:"allowed_bases"`
+	FollowExtensions   []string               `yaml:"follow_extensions"`
+	DownloadExtensions []string               `yaml:"download_extensions"`
+	Discovery          FileLogDiscoveryConfig `yaml:"discovery"`
+}
+
+// FileLogBaseConfig 部署管理员授权的宿主机安全基准目录。
+// 基准目录本身不会被递归扫描，服务日志只从当前服务挂载或人工相对路径中发现。
+type FileLogBaseConfig struct {
+	ID   string `yaml:"id"`
+	Name string `yaml:"name"`
+	Path string `yaml:"path"`
+}
+
+// FileLogDiscoveryConfig 自动发现的性能边界。
+type FileLogDiscoveryConfig struct {
+	MaxDepth        int `yaml:"max_depth"`
+	MaxEntries      int `yaml:"max_entries"`
+	TimeoutMS       int `yaml:"timeout_ms"`
+	CacheTTLSeconds int `yaml:"cache_ttl_seconds"`
 }
 
 // HooksConfig 生命周期钩子
@@ -111,6 +138,25 @@ func Load(path string) (*Config, error) {
 		}
 		cfg.Auth.JWTSecret = base64.RawURLEncoding.EncodeToString(b)
 		log.Println("[CONFIG] jwt_secret 未配置，已自动生成随机密钥（重启后失效，建议在 config.yaml 中配置固定值）")
+	}
+
+	if len(cfg.FileLogs.FollowExtensions) == 0 {
+		cfg.FileLogs.FollowExtensions = []string{".log"}
+	}
+	if len(cfg.FileLogs.DownloadExtensions) == 0 {
+		cfg.FileLogs.DownloadExtensions = []string{".log", ".gz"}
+	}
+	if cfg.FileLogs.Discovery.MaxDepth <= 0 {
+		cfg.FileLogs.Discovery.MaxDepth = 2
+	}
+	if cfg.FileLogs.Discovery.MaxEntries <= 0 {
+		cfg.FileLogs.Discovery.MaxEntries = 2000
+	}
+	if cfg.FileLogs.Discovery.TimeoutMS <= 0 {
+		cfg.FileLogs.Discovery.TimeoutMS = 300
+	}
+	if cfg.FileLogs.Discovery.CacheTTLSeconds <= 0 {
+		cfg.FileLogs.Discovery.CacheTTLSeconds = 60
 	}
 
 	C = cfg

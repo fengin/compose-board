@@ -7,6 +7,7 @@ package api
 
 import (
 	"github.com/fengin/composeboard/internal/docker"
+	"github.com/fengin/composeboard/internal/filelog"
 	"github.com/fengin/composeboard/internal/service"
 	"github.com/fengin/composeboard/internal/terminal"
 )
@@ -23,6 +24,7 @@ type Handler struct {
 	State       *service.StateManager
 	Cache       *docker.ContainerCache
 	DockerCli   *docker.Client
+	FileLogs    *filelog.Manager
 	Terminal    *terminal.SessionManager
 }
 
@@ -38,6 +40,7 @@ func NewHandler(
 	state *service.StateManager,
 	cache *docker.ContainerCache,
 	dockerCli *docker.Client,
+	fileLogs *filelog.Manager,
 	terminalM *terminal.SessionManager,
 ) *Handler {
 	return &Handler{
@@ -51,6 +54,7 @@ func NewHandler(
 		State:       state,
 		Cache:       cache,
 		DockerCli:   dockerCli,
+		FileLogs:    fileLogs,
 		Terminal:    terminalM,
 	}
 }

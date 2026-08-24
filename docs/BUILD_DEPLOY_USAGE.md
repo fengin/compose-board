@@ -1,6 +1,6 @@
 # ComposeBoard 编译、部署和使用手册
 
-> 面向开发者、部署人员和最终使用者。本文说明如何从源码编译、如何部署运行、如何配置 Compose 项目，以及如何使用主要功能。
+> 面向开发者、部署人员和最终使用者。本文说明如何从源码编译、如何部署运行、如何配置 Compose 项目，以及如何使用主要功能。本文适用于 v1.2.0，并包含从 v1.1.3 升级的配置迁移步骤。
 
 ## 1. 准备条件
 
@@ -62,6 +62,20 @@ auth:
 
 compose:
   command: "auto"
+
+file_logs:
+  enabled: true
+  allowed_bases:
+    - id: project-data
+      name: 项目数据目录
+      path: /opt/data
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
+  discovery:
+    max_depth: 2
+    max_entries: 2000
+    timeout_ms: 300
+    cache_ttl_seconds: 60
 ```
 
 关键说明：
@@ -73,6 +87,13 @@ compose:
 | `compose.command` | 推荐 `auto`，程序优先检测 `docker compose`，再检测 `docker-compose` |
 | `auth.password`   | 必须修改默认值                                                |
 | `auth.jwt_secret` | 生产环境建议固定配置                                             |
+| `file_logs.enabled` | 可选能力；缺失或为 `false` 时界面和旧版本一致 |
+
+`allowed_bases` 是服务端安全边界，不会被全量递归浏览。自动发现只检查当前服务位于基准目录内的 Docker/Compose 挂载，并受深度、条目数和时间预算限制；匹配失败时不默认其他服务目录。`.log` 默认可实时跟随和下载，`.gz` 只下载。基准路径只是授权范围，不证明该路径属于独立磁盘；生产环境应使用 `df` 或系统挂载配置确认 `DATA_ROOT` 确实位于目标数据盘。
+
+人工配置只保存 `base_id + relative_path` 到项目目录的 `.composeboard-file-logs.json`，可复制到相同服务和相对目录结构的其他项目。浏览器不能新增绝对基准目录，服务端每次查看、下载和保存仍会校验路径边界、符号链接和普通文件类型。
+
+本工作区的 `install-composeboard.sh` 只读取项目 `.env` 的 `DATA_ROOT`，将规范化后的非根绝对路径固化为 `project-data`；未检测到安全的 `DATA_ROOT` 时保持文件日志关闭。
 
 ## 4. 运行方式
 
@@ -265,7 +286,7 @@ Remove-Item Env:\CGO_ENABLED
 ### 7.4 版本号注入
 
 ```powershell
-$version = "v1.1.3"
+$version = "v1.2.0"
 $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
 go build -ldflags "-s -w -X main.Version=$version -X main.BuildTime=$buildTime" -o bin\composeboard.exe .
 ```
@@ -349,7 +370,7 @@ services:
 | `init`     | 初始化服务 |
 | `other`    | 其他    |
 
-没有标签的服务归入 `other`。
+没有标签的服务归入 `other`。 日志页两个服务下拉按 `backend → base → frontend → 其他` 稳定分组；同分类、`init`、`other` 和未标记服务都保持 API 原始相对顺序。分类标签不参与文件日志目录发现。
 
 ## 10. 使用指南
 
@@ -420,6 +441,15 @@ services:
 - `tail` 控制初始历史日志行数。
 - 实时日志基于 SSE。
 - 如果服务重建导致容器 ID 变化，日志流会尝试重连。
+配置文件日志后，工具栏首项出现“容器控制台 / 文件日志”来源下拉，与服务、目录、文件和操作按钮保持同一行。文件日志模式按“服务 → 服务级候选目录 → 文件”选择：
+
+- 目录推荐只来自当前服务位于安全基准目录内的实际 Docker Mounts、Compose volumes 和有限路径探测，不要求额外 Labels。
+- 明确的日志语义挂载即使为空也可成为候选；同一日志树中的父目录和 Nacos 等子挂载会归并，不互相制造匹配冲突。
+- 自动匹配不唯一或没有候选时不会默认第一个目录，可点击齿轮按层浏览或输入相对路径。
+- 人工配置保存到 `.composeboard-file-logs.json`；“恢复自动匹配”可删除覆盖配置。
+- 当前普通日志可连接实时跟随，也可下载；`.gz` 压缩归档仅开放下载。
+- 日志轮转或截断时，同名文件会自动重新打开并继续跟随。
+- 文件按最终后缀匹配白名单；`config.log.日期.1` 等文件默认不列出，需调整命名/压缩策略或显式扩展下载白名单。
 
 ### 10.8 打开 Web 终端
 
@@ -438,6 +468,41 @@ services:
 登录页和顶部栏提供语言切换按钮。当前支持中文和 English。
 
 ## 11. 升级 ComposeBoard 自身
+
+### 11.1 从 v1.1.3 升级到 v1.2.0
+
+v1.1.3 的 `config.yaml` 可以直接启动 v1.2.0。缺少 `file_logs` 时功能保持关闭，Docker 控制台日志和其他页面行为与旧版一致。
+
+需要启用文件日志时，在原配置中追加：
+
+    file_logs:
+      enabled: true
+      allowed_bases:
+        - id: project-data
+          name: 项目数据目录
+          path: /opt/data
+      follow_extensions: [".log"]
+      download_extensions: [".log", ".gz"]
+      discovery:
+        max_depth: 2
+        max_entries: 2000
+        timeout_ms: 300
+        cache_ttl_seconds: 60
+
+升级步骤：
+
+1. 备份 v1.1.3 二进制和 `config.yaml`。
+2. 根据 `uname -m` 选择 v1.2.0 amd64 或 arm64 二进制，并核对发布目录中的 `SHA256SUMS`。
+3. 将项目非根 `DATA_ROOT` 固化为 `allowed_bases[].path`；不要把 `/`、`/etc` 或用户可变输入作为基准目录。
+4. 原子替换二进制和配置后重启 ComposeBoard。
+5. 重新登录并验证版本、控制台日志、文件日志、下载、服务排序和 Web 终端。
+6. 确认稳定后再清理旧二进制和配置备份。
+
+ComposeBoard 自身升级不会自动重建业务容器。若同时增加日志 bind mount 或应用日志路径环境变量，新挂载只有在运维人员执行 Compose 重建后才会生效。
+
+公共安装脚本会读取项目 `.env` 的安全非根 `DATA_ROOT` 并生成上述配置；无法确定安全路径时保持文件日志关闭。
+
+### 11.2 通用替换流程
 
 推荐流程：
 
@@ -536,18 +601,45 @@ docker inspect <container> --format '{{ index .Config.Labels "com.docker.compose
 
 可先查看历史日志接口是否正常。
 
+### 12.8 文件日志目录已匹配但文件下拉为空
+
+按以下顺序检查：
+
+1. 宿主机候选目录是否真的存在允许后缀文件。
+2. 容器内应用实际写入路径是否与 bind mount 目标一致。
+3. 应用是否缺少 `LOG_PATH`、`LOGGING_PATH` 等日志路径变量。
+4. 文件名最终后缀是否命中 `follow_extensions` 或 `download_extensions`。
+5. 业务容器是否已在修改 Compose 后重新创建；只修改 YAML 不会改变现有容器挂载。
+
+目录能自动匹配只说明挂载关系可信，不保证应用已经向该目录写入文件。
+
+### 12.9 主日志目录和子日志挂载同时出现
+
+v1.2.0 会把同一 `base_id` 下互为父子的高可信目录归并为一棵日志树，自动选择评分最高的服务主目录，并保留 Nacos 等子目录供手动切换。
+
+如果仍为 `unmatched`：
+
+- 点击刷新重新发现，或确认 Compose 文件和容器 ID 已被重新加载。
+- 检查候选是否实际位于互不相关的目录；这类情况应人工选择或保存映射。
+- 不要通过扩大 `allowed_bases` 或扫描整个数据根目录规避歧义。
+
+### 12.10 Nacos 等轮转文件未显示
+
+默认下载后缀为 `.log` 和 `.gz`。类似 `config.log.2026-08-24.1` 的最终后缀是 `.1`，因此不会列出。活动的 `config.log`、`naming.log`、`remote.log` 可以正常查看和下载。
+
 ## 13. 发布前检查清单
 
 | 检查项     | 命令或动作                             |
 | ------- | --------------------------------- |
 | Go 测试   | `go test ./...`                   |
+| 服务排序    | `node scripts\test-service-order.js` |
 | i18n 校验 | `node scripts\check-i18n-keys.js` |
 | 二进制启动   | 使用测试 `config.yaml` 启动             |
 | 登录      | 验证账号密码和 token 过期处理                |
 | 服务列表    | 验证 running、exited、not_deployed    |
 | Profile | 验证启用和停用                           |
 | `.env`  | 验证表格和文本模式保存、备份、重建提示               |
-| 日志      | 验证历史日志和实时日志                       |
+| 日志      | 验证控制台/文件切换、未匹配、嵌套挂载、轮转、下载和 Range |
 | 终端      | 验证 running 服务连接和 resize           |
 | 文档      | 检查 README、截图、链接和许可证               |
 

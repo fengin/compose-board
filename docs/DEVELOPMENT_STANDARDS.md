@@ -1,6 +1,6 @@
 # ComposeBoard 开发规范文档
 
-> 面向维护者和贡献者。本文定义后续开发、修复、重构和文档维护时需要遵守的工程规范，确保项目保持轻量、清晰、可维护。
+> 面向维护者和贡献者。本文定义后续开发、修复、重构和文档维护时需要遵守的工程规范，确保项目保持轻量、清晰、可维护。 当前规范以 v1.2.0 架构为基线。
 
 ## 1. 总体原则
 
@@ -22,6 +22,7 @@
 | `internal/compose`  | Compose 文件发现、YAML 解析、`.env` 解析写入、CLI 调用 | Docker Engine API           |
 | `internal/docker`   | Docker Engine API、Transport、缓存、Exec     | Compose YAML 解析、业务状态机       |
 | `internal/terminal` | WebSocket 到 Docker Exec 的会话管理           | 服务操作规则                      |
+| `internal/filelog`  | 安全基准目录、服务级有限发现、人工映射、文件跟随和下载         | 扫描整个 `DATA_ROOT`、识别具体产品名称       |
 | `web/js/pages`      | 页面状态、交互编排                               | 后端业务最终裁决                    |
 | `web/js/components` | 可复用 UI 组件                               | 页面级复杂业务                     |
 
@@ -118,6 +119,8 @@ API 层负责把业务错误映射到 HTTP 状态码。
 - 页面级状态放在 `web/js/pages`。
 - 可复用展示组件放在 `web/js/components`。
 - API 调用统一经过 `web/js/api.js`。
+- 日志页服务排序统一经过 `web/js/service-order.js`，页面不得各自维护分类优先级。
+- 分类排序必须稳定：同分类和未标记服务保留 API 原始相对顺序。
 - 避免在多个页面重复定义状态文案、错误文案和分类文案。
 
 ### 5.2 i18n
@@ -190,7 +193,20 @@ Profile 启用/停用是组操作，前端应对组内服务逐个轮询。
 - `.env` 变量展开只使用 `.env` 内容，不读取 `os.Environ()`，保证结果可复现。
 - image 字段引用变量的变化应进入 `image_diff`，非 image 服务配置变量变化进入 `pending_env`。
 
-## 9. Web 终端规范
+## 9. 文件日志规范
+
+- `allowed_bases` 只能由服务端配置或受信安装脚本生成，Web/API 不提供新增绝对基准目录能力。
+- 自动发现只检查当前 Compose service 的 Docker Mounts 和 Compose volumes，禁止扫描整个 `DATA_ROOT`。
+- 发现规则必须保持通用，不得硬编码 EMQX、TAOS、Redis、Nacos 或公司项目服务名。
+- 深度、条目数、时间和缓存必须保留可配置预算，达到预算要返回截断状态而不是继续阻塞。
+- 明确的空日志挂载允许成为候选；同一 `base_id` 中互为父子的候选应按日志树归并，不应被当作不相关冲突。
+- 多个不相关高可信候选不得使用“第一个目录”兜底。
+- 人工映射只保存 `base_id + relative_path`，写入 `.composeboard-file-logs.json` 时使用临时文件和原子重命名。
+- 浏览、检测、列举、跟随和下载每次都要重新做 real path 边界、符号链接、普通文件和扩展名校验。
+- 文件跟随使用 Go 文件 API，不执行宿主机 shell `tail`。
+- 新增后缀或归档能力时，要分别评估实时跟随、下载、Range、在线预览和安全风险。
+
+## 10. Web 终端规范
 
 - 仅 running 服务可连接。
 - 一个 WebSocket 对应一个 Docker Exec 会话。
@@ -200,12 +216,13 @@ Profile 启用/停用是组操作，前端应对组内服务逐个轮询。
 - resize 失败只记录服务端日志，不打断终端。
 - 不记录用户命令输入和终端输出，除非后续明确设计审计能力。
 
-## 10. 测试规范
+## 11. 测试规范
 
-### 10.1 必跑检查
+### 11.1 必跑检查
 
 ```powershell
 node scripts\check-i18n-keys.js
+node scripts\test-service-order.js
 ```
 
 ```powershell
@@ -214,27 +231,28 @@ go test ./...
 Remove-Item Env:\GOCACHE
 ```
 
-### 10.2 建议覆盖
+### 11.2 建议覆盖
 
 | 变更类型       | 建议验证                                      |
 | ---------- | ----------------------------------------- |
 | Compose 解析 | YAML 文件发现、labels、profiles、depends_on、变量引用 |
 | `.env`     | 注释、空行、引号、变量展开、备份、保存                       |
 | 服务操作       | running、exited、not_deployed、build、profile |
-| 日志         | 长日志行、容器重建、SSE 状态事件                        |
+| 日志         | 长日志行、容器/文件轮转、有限发现上限、未匹配、映射复制、路径越界、SSE、Range |
 | 终端         | shell 探测、resize、主动关闭、异常断开                 |
-| 前端         | 中英文切换、状态按钮、错误提示、截图检查                      |
+| 前端         | 中英文切换、稳定服务排序、状态按钮、错误提示、截图检查             |
 
-## 11. 文档规范
+## 12. 文档规范
 
 - 对外文档放在 `docs/` 根层级。
+- 正式版本变化、兼容性、升级步骤和已知限制维护在根目录 `CHANGELOG.md`。
 - 开发过程文档、评审记录、决策讨论放在 `docs/dev/`。
 - README 根目录保留中文 `ReadMe.md` 和英文 `ReadMe.en.md`。
 - 对外文档应以当前代码实现为准，不把规划能力写成已实现。
 - 有交互或架构说明时优先使用 Mermaid 图和 `docs/ui` 截图。
 - 图片路径在根 README 中使用 `docs/ui/...`，在 `docs` 内文档中使用 `ui/...`。
 
-## 12. Windows 开发注意事项
+## 13. Windows 开发注意事项
 
 本项目维护环境包含 Windows。维护时应注意：
 
@@ -244,7 +262,7 @@ Remove-Item Env:\GOCACHE
 - 跨平台代码应通过 build tag 区分，例如 Docker Transport 的 `windows` 和 `!windows` 实现。
 - 新增脚本要考虑 Windows 使用者的执行体验。
 
-## 13. 依赖规范
+## 14. 依赖规范
 
 新增依赖前必须回答：
 
@@ -256,11 +274,12 @@ Remove-Item Env:\GOCACHE
 
 当前核心依赖包括 Gin、JWT、gorilla/websocket、gopsutil、yaml.v3、go-winio。
 
-## 14. 发布检查清单
+## 15. 发布检查清单
 
 | 检查   | 要求                                      |
 | ---- | --------------------------------------- |
 | 版本号  | 编译时注入 `main.Version`                    |
+| 变更日志 | `CHANGELOG.md` 记录功能、兼容性、升级和已知限制       |
 | 测试   | `go test ./...` 通过                      |
 | i18n | key 对称                                  |
 | 构建   | Linux、Windows、macOS 的 amd64/arm64 产物可生成 |
@@ -271,7 +290,7 @@ Remove-Item Env:\GOCACHE
 | 许可证  | 根目录应补充 `LICENSE`                        |
 | 安全   | 默认密码提示、JWT secret 提示、Web 终端风险提示齐全       |
 
-## 15. 不推荐的改动
+## 16. 不推荐的改动
 
 - 引入数据库保存状态。
 - 把前端改成必须 npm build 才能运行。
@@ -281,6 +300,8 @@ Remove-Item Env:\GOCACHE
 - 把远程 Docker、多项目、部署向导混入当前服务管理状态机。
 - 在 Web 终端中记录命令和输出但没有审计设计。
 - 将第三方资源改成在线 CDN。
+- 为方便日志发现而扫描整个宿主机、整个 `DATA_ROOT` 或接受 Web 输入的绝对路径。
+- 在多个日志页面重复实现分类排序或恢复按服务名猜分类。
 
 
 

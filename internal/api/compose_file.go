@@ -126,6 +126,9 @@ func (h *Handler) SaveComposeFile(c *gin.Context) {
 
 	// 8. 热重载声明态
 	h.Manager.ReloadCompose()
+	if h.FileLogs != nil {
+		h.FileLogs.InvalidateAll()
+	}
 
 	// 9. 生成差异摘要
 	newProject := h.Manager.GetProject()

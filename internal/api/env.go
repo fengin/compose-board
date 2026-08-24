@@ -63,8 +63,8 @@ func (h *Handler) DownloadEnvFile(c *gin.Context) {
 //   - 表格模式：{"entries": [EnvEntry...]} — 前端表格编辑器
 func (h *Handler) SaveEnvFile(c *gin.Context) {
 	var req struct {
-		Content string              `json:"content"`
-		Entries []compose.EnvEntry  `json:"entries"`
+		Content string             `json:"content"`
+		Entries []compose.EnvEntry `json:"entries"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
@@ -111,6 +111,9 @@ func (h *Handler) SaveEnvFile(c *gin.Context) {
 
 	// 热重载声明态
 	h.Manager.ReloadCompose()
+	if h.FileLogs != nil {
+		h.FileLogs.InvalidateAll()
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "保存成功",

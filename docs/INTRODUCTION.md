@@ -4,7 +4,7 @@
 
 ## 一句话介绍
 
-ComposeBoard 是一个极其轻量的 Docker Compose 可视化管理面板，用一个单文件程序为现有 Compose 项目提供服务管理、环境配置、日志查看和 Web 终端能力。
+ComposeBoard 是一个极其轻量的 Docker Compose 可视化管理面板，用一个单文件程序为现有 Compose 项目提供服务管理、环境配置、Docker 控制台与宿主机文件日志查看，以及 Web 终端能力。当前版本为 v1.2.0。
 
 ![系统概览](ui/系统概览.png)
 
@@ -29,7 +29,7 @@ ComposeBoard 把这些常见操作做成一个轻量 Web 面板，同时保留 C
 | 服务管理       | 展示 Compose 声明服务，支持启动、停止、重启、升级、重建  |
 | Profile 管理 | 按 Compose Profiles 分组启用和停用可选服务    |
 | 环境配置       | 在线编辑 `.env`，支持表格模式、文本模式、差异确认和自动备份 |
-| 日志查看       | 查看历史日志和实时日志，服务重建后可继续跟随            |
+| 日志查看       | 控制台/文件日志切换，服务级发现、人工映射、轮转续接和下载   |
 | Web 终端     | 在浏览器内通过 Docker Exec 直连运行中容器       |
 | 中英双语       | 支持中文和 English 运行时切换               |
 
@@ -46,6 +46,7 @@ ComposeBoard 把这些常见操作做成一个轻量 Web 面板，同时保留 C
 | 声明态视图      | 未部署服务也能在界面中看到                                          |
 | 单项目专注      | 避免大平台复杂度，专门服务单机 Compose 运维                             |
 | 跨平台        | 支持 Linux、Windows、macOS，支持 amd64 和 arm64                |
+| 文件日志安全边界   | 只访问配置的安全基准目录，自动发现不扫描整个数据根目录                       |
 
 ## 关键参数
 
@@ -61,6 +62,8 @@ ComposeBoard 把这些常见操作做成一个轻量 Web 面板，同时保留 C
 | 活跃内存      | 约 25~28 MB                                       |
 | 核心 API 延迟 | 本机测试小于 1 ms                                      |
 | 默认端口      | 9090                                             |
+| 当前版本      | v1.2.0                                           |
+| 文件日志默认状态  | 关闭；配置 `file_logs.allowed_bases` 后启用          |
 
 ## 与其他产品的差异
 
@@ -91,6 +94,7 @@ ComposeBoard 的目标不是取代大平台，而是在一个 Compose 项目需�
 | 本地 Docker daemon  | 远程 Docker Host     |
 | 单服务单容器视图          | 多副本编排管理            |
 | `.env`、日志、终端、升级   | 镜像仓库凭据管理           |
+| 安全基准内文件日志          | 任意宿主机目录浏览、在线解压归档 |
 
 ## 快速部署
 
@@ -108,6 +112,13 @@ auth:
   username: "admin"
   password: "changeme"
   jwt_secret: "please-change-this-secret"
+
+file_logs:
+  enabled: true
+  allowed_bases:
+    - id: project-data
+      name: 项目数据目录
+      path: /opt/data
 ```
 
 运行：
@@ -133,7 +144,7 @@ http://服务器IP:9090
 
 极其轻量、离线、单文件的 Docker Compose 可视化管理面板，性能非常优秀。
 
-为已有 Compose 项目补上服务管理、环境配置、日志和 Web 终端，不引入数据库，不改变项目结构，不把单机运维复杂化。
+为已有 Compose 项目补上服务管理、环境配置、双来源日志和 Web 终端，不引入数据库，不改变项目结构，不把单机运维复杂化。
 
 
 

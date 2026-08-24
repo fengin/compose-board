@@ -6,7 +6,9 @@
 
 > A lightweight visual management panel for single-node Docker Compose projects, covering daily operations, upgrades, environment editing, logs, and browser-based container terminals.
 
-[中文](ReadMe.md) | [Product Manual](docs/PRODUCT_MANUAL.md) | [Technical Overview](docs/TECHNICAL_OVERVIEW.md) | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md)
+[中文](README.md) | [Product Manual](docs/PRODUCT_MANUAL.md) | [Technical Overview](docs/TECHNICAL_OVERVIEW.md) | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.0 Changelog](CHANGELOG.md)
+
+Current version: **v1.2.0**
 
 Author: LingFeng（凌封）
 Homepage: https://fengin.cn  
@@ -30,7 +32,7 @@ You already have a stable `docker-compose.yml` or `compose.yaml` project, and yo
 | Native Docker labels      | Identifies containers through `com.docker.compose.project` and `com.docker.compose.service` instead of name guessing |
 | Profile operations        | Detects Compose Profiles and supports group enable/disable workflows                                                 |
 | Upgrade and rebuild hints | Keeps upgrades available for deployed image services, supports same-tag repull with forced recreation or local-image upgrades, and tracks `.env` changes for rebuilds |
-| Real-time logs            | Supports historical logs and SSE live streams, with container replacement tracking                                   |
+| Dual-source logs          | Keeps Docker console logs and adds bounded host-file discovery, SSE follow, rotation recovery, and `.log`/`.gz` download |
 | Web terminal              | Connects to running containers through Docker Exec, WebSocket, and xterm.js                                          |
 | Low footprint             | Around 20 MB RSS while idle and around 30 MB RSS during active use in local tests                                    |
 | Offline-first             | Vue, Vue Router, xterm.js, fonts, and icons are bundled locally                                                      |
@@ -45,7 +47,7 @@ You already have a stable `docker-compose.yml` or `compose.yaml` project, and yo
 | Services       | Service list, categories, status, ports, resources, start, stop, restart, upgrade, rebuild |
 | Profiles       | Optional services grouped by profile, with profile-level enable and disable                |
 | Environment    | `.env` and `docker-compose.yml` editing with built-in code editor, diff confirmation, automatic backup           |
-| Logs           | Service selection, history logs, live logs, auto scroll, reconnect state                   |
+| Logs           | Console/file source switch, service-scoped discovery, manual mapping, live follow, and download |
 | Web terminal   | Open an interactive shell in a running service container                                   |
 | About          | Version, author homepage, AI Book, and GitHub information                                  |
 
@@ -60,7 +62,9 @@ flowchart TB
     API --> Service["service layer<br>business orchestration and state aggregation"]
     Service --> Compose["compose layer<br>YAML / .env / CLI"]
     Service --> Docker["docker layer<br>Engine HTTP API"]
+    API --> FileLog["filelog layer<br>safe discovery, follow, download"]
     API --> Terminal["terminal layer<br>WebSocket and Exec sessions"]
+    FileLog --> HostFiles["Allowed host log directories"]
     Terminal --> Docker
     Compose --> ComposeCLI["docker compose / docker-compose"]
     Docker --> DockerEngine["Local Docker daemon"]
@@ -74,7 +78,7 @@ Main stack:
 | Docker access      | Direct Docker Engine HTTP API. Unix Socket on Linux/macOS, Named Pipe on Windows |
 | Compose operations | Auto-detects `docker compose` or `docker-compose` CLI                            |
 | Frontend           | Vue 3, Vue Router, plain CSS, lightweight i18n                                   |
-| Logs               | Docker logs API + SSE                                                            |
+| Logs               | Docker logs API + host file API + SSE + HTTP Range                                |
 | Web terminal       | Docker Exec API + WebSocket + xterm.js                                           |
 | Static assets      | Embedded with `go:embed` for offline usage                                       |
 
@@ -107,6 +111,15 @@ auth:
 
 compose:
   command: "auto"
+
+file_logs:
+  enabled: true
+  allowed_bases:
+    - id: "project-data"
+      name: "Project data"
+      path: "/opt/data"
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
 ```
 
 4. Start ComposeBoard:
@@ -152,6 +165,8 @@ Supported category values:
 | `init`     | Initialization services |
 | `other`    | Other services          |
 
+Both log service selectors use the stable order `backend → base → frontend → other`. Services in the same category, including unlabeled services, keep their original Compose/API relative order. Category labels are not required for file-log discovery.
+
 Use Compose Profiles for optional service groups:
 
 ```yaml
@@ -174,6 +189,7 @@ ComposeBoard currently focuses on single-node, single-project, single-replica Co
 | Upgrade and rebuild for `image:` services           | Direct build and start for undeployed `build:` services         |
 | Lifecycle, logs, and terminal for deployed services | Kubernetes, Swarm, or cluster orchestration                     |
 | Online `.env` editing                               | Registry credential management, still handled by `docker login` |
+| Host files inside configured safe bases               | Arbitrary host browsing or online `.gz` preview                   |
 
 ## Documentation
 
@@ -185,7 +201,7 @@ ComposeBoard currently focuses on single-node, single-project, single-replica Co
 | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md)  | Developers, deployment owners, end users             |
 | [Development Standards](docs/DEVELOPMENT_STANDARDS.md) | Maintainers and contributors                         |
 | [Short Introduction](docs/INTRODUCTION.md)             | Quick presentation and product selection             |
-| [Development Archives](docs/dev/)                      | Design, decision, review, and implementation records |
+| [v1.2.0 Changelog](CHANGELOG.md)                       | Upgrade owners and release maintainers                |
 
 ## License
 

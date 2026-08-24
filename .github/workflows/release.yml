@@ -18,12 +18,15 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21' # Adjust based on your go.mod
+          go-version: '1.25.0'
           cache: true
+
+      - name: Run Tests
+        run: go test ./...
 
       - name: Get Version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
       - name: Build Binaries
         run: |
@@ -34,10 +37,17 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-linux-arm64 main.go
           # Windows AMD64
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-windows-amd64.exe main.go
+          # Windows ARM64
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-windows-arm64.exe main.go
           # MacOS AMD64
           GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-darwin-amd64 main.go
           # MacOS ARM64
           GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o dist/composeboard-darwin-arm64 main.go
+
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -46,6 +56,8 @@ jobs:
             dist/composeboard-linux-amd64
             dist/composeboard-linux-arm64
             dist/composeboard-windows-amd64.exe
+            dist/composeboard-windows-arm64.exe
             dist/composeboard-darwin-amd64
             dist/composeboard-darwin-arm64
+            dist/SHA256SUMS
           generate_release_notes: true

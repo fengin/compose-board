@@ -1,5 +1,7 @@
 # ComposeBoard 产品技术参数说明
 
+> 适用版本：v1.2.0。v1.1.3 到 v1.2.0 的兼容性和升级变化见根目录 `CHANGELOG.md`。
+
 > 面向部署负责人、运维人员、安全评估人员和二次开发人员。本文列出 ComposeBoard 当前实现的运行环境、配置项、接口、性能数据、资源限制和已知边界。
 
 ## 1. 基本信息
@@ -7,7 +9,7 @@
 | 项         | 参数                                        |
 | --------- | ----------------------------------------- |
 | 产品名称      | ComposeBoard                              |
-| 当前版本默认值   | `1.1.3`，可通过编译 `-ldflags` 注入               |
+| 当前版本默认值   | `1.2.0`，可通过编译 `-ldflags` 注入               |
 | 二进制名      | `composeboard`                            |
 | Go module | `github.com/fengin/composeboard`          |
 | 开源仓库      | `https://github.com/fengin/compose-board` |
@@ -64,6 +66,17 @@ auth:
 compose:
   command: "auto"
 
+file_logs:
+  enabled: false
+  allowed_bases: []
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
+  discovery:
+    max_depth: 2
+    max_entries: 2000
+    timeout_ms: 300
+    cache_ttl_seconds: 60
+
 hooks:
   pre_deploy: ""
   post_deploy: ""
@@ -87,6 +100,16 @@ extensions:
 | `auth.password`                        | string | 无                       | 是   | 登录密码                                     |
 | `auth.jwt_secret`                      | string | 自动生成临时值                 | 否   | JWT 签名密钥                                 |
 | `compose.command`                      | string | `auto`                  | 否   | `auto`、`docker-compose`、`docker compose` |
+| `file_logs.enabled`                    | bool   | `false`                 | 否   | 是否启用宿主机文件日志入口                         |
+| `file_logs.allowed_bases[].id`         | string | 无                       | 启用时 | Web/API 使用的稳定安全基准标识                    |
+| `file_logs.allowed_bases[].name`       | string | `id`                   | 否   | UI 展示名称                                  |
+| `file_logs.allowed_bases[].path`       | string | 无                       | 启用时 | 服务端固化的非根宿主机绝对目录                       |
+| `file_logs.follow_extensions`          | array  | `[".log"]`             | 否   | 允许实时跟随的后缀                              |
+| `file_logs.download_extensions`        | array  | `[".log",".gz"]`       | 否   | 允许下载的后缀                                |
+| `file_logs.discovery.max_depth`        | int    | `2`                    | 否   | 单挂载浅层发现最大深度                            |
+| `file_logs.discovery.max_entries`      | int    | `2000`                 | 否   | 单次发现最多访问条目                             |
+| `file_logs.discovery.timeout_ms`       | int    | `300`                  | 否   | 单次发现时间预算                               |
+| `file_logs.discovery.cache_ttl_seconds`| int    | `60`                   | 否   | 自动发现缓存时间                               |
 | `hooks.pre_deploy`                     | string | 空                       | 否   | 配置结构预留，当前主流程未执行                          |
 | `hooks.post_deploy`                    | string | 空                       | 否   | 配置结构预留，当前主流程未执行                          |
 | `extensions.host_ip.enabled`           | bool   | `false`                 | 否   | 配置结构预留                                   |
@@ -115,6 +138,8 @@ extensions:
 | Label                       | 值                                          |
 | --------------------------- | ------------------------------------------ |
 | `com.composeboard.category` | `base`、`backend`、`frontend`、`init`、`other` |
+
+`base` 表示中间件/基础服务。日志页稳定顺序为 `backend → base → frontend → 其他`；同分类和未标记服务保持 Compose/API 原始相对顺序。标签是可选 UI 元数据，不参与文件日志路径授权或自动发现。
 
 Docker Compose 原生 label 依赖：
 
@@ -240,6 +265,22 @@ SSE 事件：
 | `streaming`    | 正在跟随日志        |
 | `waiting`      | 容器暂不可挂载或等待新容器 |
 | `reconnecting` | 日志源异常，准备重连    |
+文件日志 API：
+
+| 方法 | 路径 | 参数 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/file-logs/bases` | 无 | 功能开关和安全基准目录状态 |
+| GET | `/api/file-logs/services/:name/source` | `refresh` | 人工映射或有限自动发现结果 |
+| PUT/DELETE | `/api/file-logs/services/:name/mapping` | JSON | 保存人工映射或恢复自动匹配 |
+| POST | `/api/file-logs/mapping/validate` | `base_id`、`relative_path` | 检测路径、日志文件和子目录数量 |
+| GET | `/api/file-logs/browse` | `base`、`path` | 返回直接子目录，最多100项 |
+| GET | `/api/file-logs/files` | `base`、`directory` | 返回文件大小、更新时间、可跟随/下载能力 |
+| GET | `/api/file-logs/stream` | `base`、`path`、`tail=100` | SSE 跟随普通日志 |
+| GET | `/api/file-logs/download` | `base`、`path` | 下载普通日志或 `.gz`，支持 Range |
+
+自动发现默认限制为2层、2000项、300ms并缓存60秒；响应通过 `discovery_truncated` 表示达到性能边界。文件 SSE 状态增加 `rotating`。其他限制：`tail` 为10～5000，单行最大1 MiB，初始尾读最多回溯32 MiB，轮询间隔500ms，heartbeat 间隔15秒。
+
+明确的空日志挂载可以成为候选；同一 `base_id` 中互为父子的高可信候选归并为一棵日志树。文件名按最终后缀匹配白名单，因此 `.gz` 可下载但不能跟随，`config.log.日期.1` 等非白名单结尾默认不列出。
 
 ### 6.5 Web 终端
 
@@ -287,6 +328,12 @@ SSE 事件：
 | 日志重试延迟               | 1200 ms   | logs.go        |
 | 日志源检查间隔              | 800 ms    | logs.go        |
 | 日志单行最大扫描             | 1 MiB     | logs.go        |
+| 文件日志发现深度             | 2层        | filelog        |
+| 文件日志发现条目             | 2000      | filelog        |
+| 文件日志发现时间             | 300 ms    | filelog        |
+| 文件日志缓存               | 60 秒      | filelog        |
+| 文件跟随轮询               | 500 ms    | filelog        |
+| 文件初始尾读回溯             | 32 MiB    | filelog        |
 | 最大终端会话               | 8         | terminal       |
 | 终端 ping 间隔           | 25 秒      | terminal       |
 | 终端 pong 超时           | 60 秒      | terminal       |
@@ -305,13 +352,14 @@ SSE 事件：
 | `.env`                     | `project.dir`                     | Compose 环境变量            |
 | `.env.bak.YYYYMMDD-HHMMSS` | `project.dir`                     | `.env` 保存前自动备份          |
 | `.composeboard-state.json` | `project.dir`                     | 已生效镜像、变量和 Profile 配置态基线 |
+| `.composeboard-file-logs.json` | `project.dir`                   | service 到安全基准相对日志目录的人工映射 |
 | Compose YAML               | `project.dir`                     | 服务声明                    |
 
 当前不会读取或迁移旧版 `.deployboard-state.json`。
 
 ## 9. 性能测试参数
 
-以下数据来自开发过程性能测试报告，测试日期为 2026-04-24，当前文档适用版本为 v1.1.3，测试人为凌封。数据用于评估 ComposeBoard 在典型单机 Compose 项目中的资源占用和响应能力，实际结果会受硬件、Docker 服务数量、容器状态、磁盘性能和网络环境影响。
+以下数据来自开发过程性能测试报告，测试日期为 2026-04-24，当前文档适用版本为 v1.2.0，测试人为凌封。数据用于评估 ComposeBoard 在典型单机 Compose 项目中的资源占用和响应能力，实际结果会受硬件、Docker 服务数量、容器状态、磁盘性能和网络环境影响。
 
 ### 9.1 测试环境
 
@@ -505,6 +553,9 @@ SSE 事件：
 | 终端审计            | 当前无                                            |
 | 运行时 env 脱敏      | 按 key 包含 `PASSWORD`、`SECRET`、`TOKEN`、`PASS` 判断 |
 | HTTPS           | 应由外部反向代理提供                                     |
+| 文件日志路径        | 服务端 `allowed_bases` + 相对路径 + real path 边界校验    |
+| 符号链接          | 浏览、映射、跟随和下载均拒绝                               |
+| 文件类型          | 只允许普通文件，跟随和下载分别使用后缀白名单                      |
 
 建议：
 
@@ -527,6 +578,8 @@ SSE 事件：
 | 完整设置页              | 当前代码未实现              |
 | HOST_IP 自动写回       | 配置结构存在，当前主流程未实现      |
 | 镜像仓库凭据管理           | 不管理，依赖 Docker daemon |
+| 任意宿主机文件浏览          | 不支持，只访问配置的安全基准目录 |
+| 压缩日志在线预览           | 不支持，`.gz` 只下载      |
 
 ## 作者信息
 

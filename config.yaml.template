@@ -20,6 +20,22 @@ auth:
 compose:
   command: "auto"                    # "auto" | "docker-compose" | "docker compose"
 
+# 宿主机文件日志（可选，默认关闭）
+# allowed_bases 只定义安全边界，不会被全量递归扫描。
+file_logs:
+  enabled: false
+  allowed_bases:
+    # - id: "project-data"            # 跨项目复制映射时保持稳定
+    #   name: "项目数据目录"
+    #   path: "/opt/data"             # ComposeBoard 进程可访问的宿主机绝对路径
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
+  discovery:
+    max_depth: 2
+    max_entries: 2000
+    timeout_ms: 300
+    cache_ttl_seconds: 60
+
 # 生命周期钩子
 hooks:
   pre_deploy: ""                     # 部署前执行的脚本路径

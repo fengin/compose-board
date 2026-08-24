@@ -78,6 +78,7 @@ const API = {
     get(path) { return this.request('GET', path); },
     post(path, body) { return this.request('POST', path, body); },
     put(path, body) { return this.request('PUT', path, body); },
+    delete(path) { return this.request('DELETE', path); },
 
     // === 认证 ===
     async login(username, password) {
@@ -132,6 +133,63 @@ const API = {
         const token = this.getToken();
         const url = `${this.baseURL}/api/services/${service}/logs?follow=true&tail=${tail}&token=${token}`;
         return new EventSource(url);
+    },
+    // === 宿主机文件日志（可选） ===
+    getFileLogBases() {
+        return this.get('/api/file-logs/bases');
+    },
+
+    getServiceFileLogSource(service, refresh = false) {
+        const params = new URLSearchParams();
+        if (refresh) params.set('refresh', 'true');
+        const suffix = params.toString() ? '?' + params.toString() : '';
+        return this.get(`/api/file-logs/services/${encodeURIComponent(service)}/source${suffix}`);
+    },
+
+    saveServiceFileLogMapping(service, directories) {
+        return this.put(`/api/file-logs/services/${encodeURIComponent(service)}/mapping`, { directories });
+    },
+
+    deleteServiceFileLogMapping(service) {
+        return this.delete(`/api/file-logs/services/${encodeURIComponent(service)}/mapping`);
+    },
+
+    validateFileLogMapping(baseId, relativePath) {
+        return this.post('/api/file-logs/mapping/validate', { base_id: baseId, relative_path: relativePath });
+    },
+
+    browseFileLogDirectories(baseId, path = '') {
+        const params = new URLSearchParams({ base: baseId, path });
+        return this.get('/api/file-logs/browse?' + params.toString());
+    },
+
+    getFileLogFiles(base, directory = '') {
+        const params = new URLSearchParams({ base, directory });
+        return this.get('/api/file-logs/files?' + params.toString());
+    },
+
+    createFileLogStream(base, path, tail = 100) {
+        const params = new URLSearchParams({
+            base,
+            path,
+            tail: String(tail),
+            token: this.getToken() || ''
+        });
+        return new EventSource(this.baseURL + '/api/file-logs/stream?' + params.toString());
+    },
+
+    downloadFileLog(base, path) {
+        const params = new URLSearchParams({
+            base,
+            path,
+            token: this.getToken() || ''
+        });
+        const anchor = document.createElement('a');
+        anchor.href = this.baseURL + '/api/file-logs/download?' + params.toString();
+        anchor.rel = 'noopener';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
     },
 
     // WebSocket URL（WebSocket 无法设置 Authorization Header，使用 query token）

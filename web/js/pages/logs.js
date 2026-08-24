@@ -8,10 +8,23 @@
  * 前端仅在 HTTP 连接本身断开时做自动重连（如 ComposeBoard 重启、网络断）
  */
 const LogsPage = {
+    props: {
+        fileLogsEnabled: { type: Boolean, default: false },
+        sourceType: { type: String, default: 'console' }
+    },
     template: `
     <div style="display: flex; flex-direction: column; height: 100%;">
         <div class="log-toolbar">
-            <select v-model="selectedService" @change="reconnect">
+            <select
+                v-if="fileLogsEnabled"
+                class="log-source-select"
+                :value="sourceType"
+                @change="$emit('change-source', $event.target.value)"
+            >
+                <option value="console">{{ $t('logs.source_console') }}</option>
+                <option value="file">{{ $t('logs.source_file') }}</option>
+            </select>
+            <select class="console-log-service-select" v-model="selectedService" @change="reconnect">
                 <option value="">— {{ $t('logs.select_service') }} —</option>
                 <option v-for="svc in services" :key="svc" :value="svc">{{ svc }}</option>
             </select>
@@ -113,10 +126,9 @@ const LogsPage = {
             try {
                 const list = await API.getServices();
                 // 所有已部署的服务（运行中 + 已停止都可看日志）
-                this.services = (list || [])
-                    .filter(s => s.status !== 'not_deployed')
-                    .map(s => s.name)
-                    .sort();
+                this.services = ServiceOrder.sort(
+                    (list || []).filter(service => service.status !== 'not_deployed')
+                ).map(service => service.name);
             } catch (e) {
                 // 静默
             }

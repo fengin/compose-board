@@ -19,6 +19,7 @@ import (
 	"github.com/fengin/composeboard/internal/compose"
 	"github.com/fengin/composeboard/internal/config"
 	"github.com/fengin/composeboard/internal/docker"
+	"github.com/fengin/composeboard/internal/filelog"
 	"github.com/fengin/composeboard/internal/service"
 	"github.com/fengin/composeboard/internal/terminal"
 	"github.com/gin-gonic/gin"
@@ -29,7 +30,7 @@ var webFS embed.FS
 
 // 版本信息（编译时通过 -ldflags 注入）
 var (
-	Version   = "1.1.3"
+	Version   = "1.2.0"
 	BuildTime = "unknown"
 )
 
@@ -123,13 +124,16 @@ func main() {
 	// Web 终端会话管理器（空闲时不持有会话资源）
 	terminalM := terminal.NewSessionManager(dockerCli, 0)
 
+	// 宿主机文件日志管理器（未配置时保持禁用）
+	fileLogM := filelog.NewManager(cfg.FileLogs, cfg.Project.Dir, manager, dockerCli)
+
 	// API Handler
 	// ProjectName 用于 UI 显示：优先用 config 的显示名称，兜底用 Docker project name
 	displayName := cfg.Project.Name
 	if displayName == "" {
 		displayName = dockerProjectName
 	}
-	handler := api.NewHandler(displayName, cfg.Project.Dir, Version, manager, lifecycleM, upgradeM, profileM, stateM, cache, dockerCli, terminalM)
+	handler := api.NewHandler(displayName, cfg.Project.Dir, Version, manager, lifecycleM, upgradeM, profileM, stateM, cache, dockerCli, fileLogM, terminalM)
 
 	// === 设置 Gin ===
 	gin.SetMode(gin.ReleaseMode)
@@ -188,6 +192,17 @@ func main() {
 
 		// 日志
 		authorized.GET("/services/:name/logs", handler.GetContainerLogs)
+
+		// 宿主机文件日志（独立追加能力）
+		authorized.GET("/file-logs/bases", handler.GetFileLogBases)
+		authorized.GET("/file-logs/services/:name/source", handler.GetServiceFileLogSource)
+		authorized.PUT("/file-logs/services/:name/mapping", handler.SaveServiceFileLogMapping)
+		authorized.DELETE("/file-logs/services/:name/mapping", handler.DeleteServiceFileLogMapping)
+		authorized.POST("/file-logs/mapping/validate", handler.ValidateFileLogMapping)
+		authorized.GET("/file-logs/browse", handler.BrowseFileLogDirectories)
+		authorized.GET("/file-logs/files", handler.ListFileLogFiles)
+		authorized.GET("/file-logs/stream", handler.StreamFileLog)
+		authorized.GET("/file-logs/download", handler.DownloadFileLog)
 
 		// Web 终端
 		authorized.GET("/services/:name/terminal", handler.OpenServiceTerminal)

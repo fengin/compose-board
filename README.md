@@ -6,7 +6,9 @@
 
 > 轻量级 Docker Compose 可视化管理面板，面向单机 Compose 项目的日常运维、版本升级、环境配置、日志排查和 Web 终端操作。
 
-[English](ReadMe.en.md) | [产品功能说明](docs/PRODUCT_MANUAL.md) | [技术说明](docs/TECHNICAL_OVERVIEW.md) | [编译部署使用](docs/BUILD_DEPLOY_USAGE.md)
+[English](README.EN.md) | [产品功能说明](docs/PRODUCT_MANUAL.md) | [技术说明](docs/TECHNICAL_OVERVIEW.md) | [编译部署使用](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.0 变更日志](CHANGELOG.md)
+
+当前版本：**v1.2.0**
 
 作者：凌封  
 作者主页：https://fengin.cn  
@@ -30,7 +32,7 @@ ComposeBoard 不是 Kubernetes 平台，也不是全功能服务器面板。它�
 | 原生 Docker 标签识别 | 使用 `com.docker.compose.project` / `com.docker.compose.service` 定位容器，不依赖服务名猜测 |
 | Profile 分组运维   | 识别 Compose Profiles，支持整组启用、停用和状态展示                                           |
 | 镜像升级与配置重建      | 已部署的 `image:` 服务可随时在线拉取或使用本地镜像升级；支持同标签镜像重新拉取并强制重建，对 `.env` 变更提示相关服务重建 |
-| 实时日志           | 支持历史日志与 SSE 实时日志流，服务重建后可继续跟随新容器                                              |
+| 双来源日志          | 保留 Docker 控制台日志；按所选服务挂载有限发现文件日志，支持人工相对路径映射、轮转续接、`.log` 实时跟随和 `.gz` 下载       |
 | Web 终端         | 基于 Docker Exec + WebSocket + xterm.js 直连运行中容器                                |
 | 低资源占用          | 实测休眠约 20 MB RSS，活跃约 30 MB RSS，适合低配服务器和边缘节点                                   |
 | 离线优先           | Vue、Vue Router、xterm.js、字体等前端依赖均随程序内置                                        |
@@ -45,7 +47,7 @@ ComposeBoard 不是 Kubernetes 平台，也不是全功能服务器面板。它�
 | 服务管理     | 服务列表、分类、状态、端口、资源占用、启动、停止、重启、升级、重建        |
 | Profiles | 可选服务按 profile 分组，支持启用和停用整组服务             |
 | 环境配置     | `.env` 与 `docker-compose.yml` 编辑，内置高亮代码编辑器，支持文件下载，保存前差异确认，自动备份 |
-| 日志查看     | 服务选择、历史日志、实时日志、自动滚动、重连状态提示               |
+| 日志查看     | 单行来源切换、服务级目录发现、人工映射、实时跟随、轮转续接和日志下载       |
 | Web 终端   | 选择运行中服务，浏览器内打开交互式 shell                  |
 | 关于信息     | 产品版本、作者主页、AI 全书、GitHub 信息                |
 
@@ -60,7 +62,9 @@ flowchart TB
     API --> Service["service 层<br>业务编排与状态聚合"]
     Service --> Compose["compose 层<br>YAML / .env / CLI"]
     Service --> Docker["docker 层<br>Engine HTTP API"]
+    API --> FileLog["filelog 层<br>安全发现、跟随与下载"]
     API --> Terminal["terminal 层<br>WebSocket 与 Exec 会话"]
+    FileLog --> HostFiles["允许的宿主机日志目录"]
     Terminal --> Docker
     Compose --> ComposeCLI["docker compose / docker-compose"]
     Docker --> DockerEngine["本地 Docker daemon"]
@@ -74,7 +78,7 @@ flowchart TB
 | Docker 通信  | 直接调用 Docker Engine HTTP API，Linux/macOS 使用 Unix Socket，Windows 使用 Named Pipe |
 | Compose 操作 | 自动检测 `docker compose` 或 `docker-compose` CLI                                 |
 | 前端         | Vue 3、Vue Router、原生 CSS、轻量 i18n                                              |
-| 日志         | Docker logs API + SSE                                                        |
+| 日志         | Docker logs API + 宿主机文件 API + SSE + HTTP Range                              |
 | Web 终端     | Docker Exec API + WebSocket + xterm.js                                       |
 | 静态资源       | `go:embed` 内嵌，离线运行                                                           |
 
@@ -107,6 +111,15 @@ auth:
 
 compose:
   command: "auto"
+
+file_logs:
+  enabled: true
+  allowed_bases:
+    - id: "project-data"
+      name: "项目数据目录"
+      path: "/opt/data"
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
 ```
 
 4. 启动：
@@ -152,6 +165,8 @@ services:
 | `init`     | 初始化服务 |
 | `other`    | 其他服务  |
 
+日志页的两个服务下拉按 `backend → base → frontend → 其他` 稳定分组；同一分类以及未打标签的服务保持 Compose/API 原始相对顺序。分类标签只影响展示，不参与文件日志目录发现。
+
 可选服务请使用 Compose Profiles：
 
 ```yaml
@@ -174,6 +189,7 @@ ComposeBoard 当前版本聚焦单机、单项目、单副本 Compose 运维：
 | `image:` 服务升级、重建 | 未部署 `build:` 服务直接构建启动           |
 | 已部署服务启停、日志、终端    | Kubernetes、Swarm、集群编排           |
 | `.env` 在线编辑      | 镜像仓库凭据管理，凭据仍由 `docker login` 管理 |
+| 安全基准内文件日志        | 任意宿主机目录浏览、在线解压 `.gz`          |
 
 ## 文档导航
 
@@ -185,7 +201,7 @@ ComposeBoard 当前版本聚焦单机、单项目、单副本 Compose 运维：
 | [产品编译、部署和使用手册](docs/BUILD_DEPLOY_USAGE.md) | 开发者、部署人员、最终使用者  |
 | [开发规范文档](docs/DEVELOPMENT_STANDARDS.md)    | 后续维护者和贡献者       |
 | [产品精简介绍](docs/INTRODUCTION.md)             | 快速介绍、宣传、选型沟通    |
-| [开发过程归档](docs/dev/)                        | 设计、决策、评审和实现过程材料 |
+| [v1.2.0 变更日志](CHANGELOG.md)                  | 升级人员、发布维护者       |
 
 ## 许可证
 

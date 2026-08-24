@@ -1,6 +1,6 @@
 # ComposeBoard 产品技术说明
 
-> 面向后端开发、前端开发、架构维护者和需要理解实现边界的运维人员。本文以当前代码实现为准，开发期文档中未落地的设置页、部署向导、远程 Docker Host 等能力不作为当前发布功能描述。
+> 面向后端开发、前端开发、架构维护者和需要理解实现边界的运维人员。本文以当前代码实现为准，开发期文档中未落地的设置页、部署向导、远程 Docker Host 等能力不作为当前发布功能描述。本文适用于 v1.2.0；v1.1.3 到 v1.2.0 的发布差异见根目录 `CHANGELOG.md`。
 
 ## 1. 架构目标
 
@@ -27,6 +27,7 @@ flowchart TB
         Auth["auth<br>JWT"]
         API["api<br>HTTP 适配"]
         Service["service<br>业务编排"]
+        FileLog["filelog<br>安全发现、跟随、下载"]
         Terminal["terminal<br>会话管理"]
         Compose["compose<br>YAML / .env / CLI"]
         Docker["docker<br>Engine API"]
@@ -37,6 +38,7 @@ flowchart TB
         CLI["docker compose / docker-compose"]
         Engine["Docker daemon"]
         Project["Compose 项目目录"]
+        HostFiles["安全基准内宿主机日志"]
     end
 
     Vue --> Router
@@ -45,7 +47,9 @@ flowchart TB
     Router --> Auth
     Auth --> API
     API --> Service
+    API --> FileLog
     API --> Terminal
+    FileLog --> HostFiles
     API --> Host
     Service --> Compose
     Service --> Docker
@@ -71,6 +75,7 @@ compose-board/
 │  │  ├─ profiles.go               # Profiles 启用/停用
 │  │  ├─ env.go                    # .env 读写
 │  │  ├─ logs.go                   # 历史日志和 SSE 实时日志
+│  │  ├─ file_logs.go              # 文件日志发现、映射、浏览、SSE 和下载
 │  │  ├─ terminal.go               # Web 终端 WebSocket 接入
 │  │  ├─ settings.go               # 项目设置只读 API
 │  │  └─ host.go                   # 主机信息 API
@@ -79,6 +84,7 @@ compose-board/
 │  ├─ config/                      # config.yaml 加载与默认值
 │  ├─ docker/                      # Docker Engine API、Transport、缓存、Exec
 │  ├─ host/                        # 主机 OS、CPU、内存、磁盘、IP 和 Docker 版本
+│  ├─ filelog/                     # 安全基准、有限发现、映射、跟随和下载
 │  ├─ service/                     # 服务视图、生命周期、升级、Profiles、状态文件
 │  └─ terminal/                    # Web 终端会话生命周期
 ├─ web/
@@ -88,15 +94,16 @@ compose-board/
 │  └─ js/
 │     ├─ app.js                    # 路由和根应用
 │     ├─ api.js                    # API 客户端
+│     ├─ service-order.js          # 日志服务下拉稳定分类排序
 │     ├─ i18n.js                   # 轻量 i18n
 │     ├─ locales/                  # zh/en 文案
 │     ├─ pages/                    # dashboard/services/logs/terminal/env/login
 │     ├─ components/               # 通用组件
 │     └─ vendor/                   # Vue、Vue Router、xterm.js
+├─ CHANGELOG.md                    # 正式版本变化、升级和兼容性说明
 └─ docs/
    ├─ ui/                          # 对外截图
-   ├─ logo/                        # 产品 Logo
-   └─ dev/                         # 开发过程归档材料
+   └─ logo/                        # 产品 Logo
 ```
 
 ## 4. 分层职责
@@ -606,6 +613,79 @@ sequenceDiagram
 - 重试延迟：1200 ms。
 - 单行日志扫描上限：1 MiB。
 - Docker logs 固定开启 timestamps，前端可做时间展示和续挂判断。
+### 14.1 宿主机文件日志
+
+文件日志继续作为独立追加能力，原 `GET /api/services/:name/logs`、Docker Logs API 和控制台日志 SSE 状态机不变。启用后，来源下拉与服务、目录、文件和操作按钮位于同一工具栏。两种来源共用 `service-order.js`：`backend → base → frontend → 其他`，同组和未标记服务保持原始相对顺序。
+
+```mermaid
+flowchart LR
+    Service["所选 Compose service"] --> Manual{"存在人工映射？"}
+    Manual -->|是| Store[".composeboard-file-logs.json"]
+    Manual -->|否| Mounts["Docker Mounts + Compose volumes"]
+    Mounts --> Base["allowed_bases 安全过滤"]
+    Base --> Probe["精确路径 + 有界浅层探测"]
+    Probe --> Tree["父子候选归并为日志树"]
+    Tree --> Source["唯一高可信树 / 多候选 / 未匹配"]
+    Store --> Source
+    Source --> File["普通日志、SSE、下载"]
+```
+
+配置示例：
+
+```yaml
+file_logs:
+  enabled: true
+  allowed_bases:
+    - id: project-data
+      name: 项目数据目录
+      path: /opt/data
+  follow_extensions: [".log"]
+  download_extensions: [".log", ".gz"]
+  discovery:
+    max_depth: 2
+    max_entries: 2000
+    timeout_ms: 300
+    cache_ttl_seconds: 60
+```
+
+`allowed_bases` 只表达可访问的安全边界，不直接全量浏览。自动发现流程：
+
+1. 只读取当前 service 的 Docker 实际 Mounts 和 Compose volumes。
+2. 丢弃不位于任何安全基准目录内的宿主机挂载。
+3. 优先使用 `LOGGING_PATH` 等运行时准确路径，再尝试镜像名、service name 和容器名对应的精确子目录。
+4. 挂载源/目标的 `log`、`logs` 路径段、变量名日志语义和实际允许扩展名只作为通用评分信号，不识别 EMQX、TAOS 等具体产品。
+5. 精确匹配失败后最多扫描2层、2000项和300ms；达到任一上限立即返回部分结果并标记 `discovery_truncated`。
+6. 明确的日志语义挂载即使暂时为空也可作为候选，等待应用首次创建日志。
+7. 同一 `base_id` 内互为父子的高可信候选归并为一棵日志树；评分最高的目录作为自动选择，子挂载继续保留为可选目录。
+8. 只有唯一高可信日志树或明显更强的候选才自动选中；不相关的多候选或无候选不使用“第一个目录”兜底。
+
+人工映射保存在项目目录的 `.composeboard-file-logs.json`，只记录 Compose service name、稳定 `base_id` 和相对路径。Web 通过按层懒加载浏览或相对路径输入完成配置；复制该文件即可复用到相同服务和相对目录结构的其他项目。人工配置优先于自动发现，“恢复自动匹配”会删除对应 service 映射。保存使用临时文件加原子重命名。
+
+文件日志接口：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/file-logs/bases` | 功能开关及安全基准目录状态 |
+| GET | `/api/file-logs/services/:name/source` | 人工映射或有限自动发现结果 |
+| PUT | `/api/file-logs/services/:name/mapping` | 验证并保存人工映射 |
+| DELETE | `/api/file-logs/services/:name/mapping` | 恢复自动匹配 |
+| POST | `/api/file-logs/mapping/validate` | 检测 base id、相对路径和日志文件数 |
+| GET | `/api/file-logs/browse` | 只返回指定路径的直接子目录，最多100项 |
+| GET | `/api/file-logs/files` | 指定目录的普通日志与归档元数据 |
+| GET | `/api/file-logs/stream` | 文件日志 SSE |
+| GET | `/api/file-logs/download` | 流式下载，支持 Range |
+
+自动发现缓存默认60秒，缓存签名包含 Compose 文件、`.env` 修改时间和容器 ID；保存 Compose、`.env` 或人工映射后主动失效。
+
+文件跟随采用 Go 文件 API，不执行宿主机 `tail`。初始尾读按64 KiB 块反向扫描且最多回溯32 MiB；随后每500ms检测追加、截断和文件身份变化。Windows 使用允许 `FILE_SHARE_DELETE` 的只读句柄。SSE 复用 `streaming`、`waiting`、`reconnecting` 并增加 `rotating`，每15秒发送 heartbeat。
+
+安全规则：
+
+- Web 不能新增或修改绝对安全基准目录。
+- 人工配置只接收 `base_id + relative_path`，拒绝绝对路径、`..` 和符号链接。
+- 浏览、查看、跟随、下载和保存时都重新验证路径仍位于安全基准目录内。
+- 只允许普通文件；实时跟随与下载分别受扩展名白名单控制。
+- 自动发现不扫描整个 `DATA_ROOT`，大型挂载达到预算后立即停止。
 
 ## 15. Web 终端
 
@@ -725,6 +805,7 @@ Shell 按目标容器 OS 探测，与宿主机平台无关，探测结果按 `co
 | GET  | `/api/services/:name/logs`        | 历史日志或 SSE 实时日志 |
 | GET  | `/api/services/:name/terminal`    | WebSocket 终端   |
 | GET  | `/api/settings/project`           | 项目信息只读 API     |
+| *    | `/api/file-logs/*`                  | 文件日志发现、映射、浏览、跟随和下载 |
 
 ## 17. 前端实现
 
@@ -751,7 +832,8 @@ Shell 按目标容器 OS 探测，与宿主机平台无关，探测结果按 `co
 - 服务列表页批量读取 `/api/services` 和 `/api/profiles`。
 - 启停重启等同步操作后，按单服务轮询 `/api/services/:name/status`。
 - pull 为异步状态，通过 `/pull-status` 轮询。
-- 日志使用 SSE。
+- 日志使用 SSE；来源切换由 `LogViewerPage` 隔离控制台和文件日志组件生命周期。
+- 两个日志组件统一调用 `ServiceOrder.sort`，不在页面内重复分类排序。
 - 终端使用 WebSocket。
 
 ## 18. 安全模型
@@ -766,6 +848,8 @@ Shell 按目标容器 OS 探测，与宿主机平台无关，探测结果按 `co
 | Origin 检查    | 终端 WebSocket 检查 Origin host 与请求 host 一致 |
 | 敏感变量         | 运行时 env 按 key 脱敏                        |
 | 审计日志         | 当前不记录用户命令输入或终端输出                        |
+| 文件日志授权       | 仅服务端配置的 `allowed_bases`，Web 只传 `base_id + relative_path` |
+| 文件类型         | 普通文件检查、符号链接拒绝、跟随/下载扩展名白名单               |
 
 部署建议：
 
@@ -797,6 +881,8 @@ Shell 按目标容器 OS 探测，与宿主机平台无关，探测结果按 `co
 4. 任何 Docker 操作都要明确超时。
 5. 对操作后状态展示，优先单服务实时查询，不依赖全量缓存刷新。
 6. 对 `build:` 服务保持边界明确，避免把本地构建、部署向导和升级逻辑混在普通服务操作里。
+7. 文件日志发现必须保持服务级、有预算、无产品名硬编码，禁止改成扫描整个 `DATA_ROOT`。
+8. 日志服务排序统一维护在 `service-order.js`，新增分类时同时评估 Dashboard 展示和下拉顺序。
 
 ## 作者信息
 

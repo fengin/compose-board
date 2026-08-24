@@ -12,7 +12,7 @@ const { createRouter, createWebHistory } = VueRouter;
 const routes = [
     { path: '/', name: 'dashboard', component: DashboardPage },
     { path: '/services', name: 'services', component: ServicesPage },
-    { path: '/logs', name: 'logs', component: LogsPage },
+    { path: '/logs', name: 'logs', component: LogViewerPage },
     { path: '/terminal', name: 'terminal', component: TerminalPage },
     { path: '/env', name: 'env', component: EnvPage },
     // G-4: 旧 URL 兼容重定向
@@ -91,6 +91,8 @@ const router = createRouter({
     app.component('upgrade-modal', UpgradeModal);
     app.component('service-table', ServiceTable);
     app.component('code-editor', CodeEditorComponent);
+    app.component('console-log-panel', LogsPage);
+    app.component('file-log-panel', FileLogPanel);
 
     // 使用路由
     app.use(router);
