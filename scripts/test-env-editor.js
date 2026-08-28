@@ -4,7 +4,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const pagePath = path.join(__dirname, '..', 'web', 'js', 'pages', 'env.js');
-const source = `${fs.readFileSync(pagePath, 'utf8')}\nglobalThis.__envEditorUtils = EnvEditorUtils;\nglobalThis.__envPage = EnvPage;`;
+const lineDiffPath = path.join(__dirname, '..', 'web', 'js', 'line-diff.js');
+const source = `${fs.readFileSync(lineDiffPath, 'utf8')}\nglobalThis.__lineDiffUtils = LineDiffUtils;\n${fs.readFileSync(pagePath, 'utf8')}\nglobalThis.__envEditorUtils = EnvEditorUtils;\nglobalThis.__envPage = EnvPage;`;
 const sandbox = {
     globalThis: {},
     console,
@@ -16,6 +17,7 @@ vm.runInContext(source, sandbox, { filename: pagePath });
 
 const envEditor = sandbox.globalThis.__envEditorUtils;
 const envPage = sandbox.globalThis.__envPage;
+const lineDiff = sandbox.globalThis.__lineDiffUtils;
 
 function findVariable(entries, key) {
     const entry = entries.find(item => item.type === 'variable' && item.key === key);
@@ -29,6 +31,10 @@ function normalized(value) {
 
 function assertDiff(oldContent, newContent, expected) {
     assert.deepEqual(normalized(envEditor.buildDiff(oldContent, newContent)), expected);
+}
+
+function assertLineDiff(oldContent, newContent, expected) {
+    assert.deepEqual(normalized(lineDiff.buildChanges(oldContent, newContent)), expected);
 }
 
 function createPageContext(rawText, entries = envEditor.parseEntries(rawText)) {
@@ -151,6 +157,55 @@ test('页面监听器从文本模式切表格模式会建立当前文本基线',
     assert.equal(quoted.value, 'from text mode');
     assert.equal(quoted._originalValue, 'from text mode');
     assert.equal(context.getEnvCurrentContent(), rawText);
+});
+
+test('Compose 中间新增多行时只展示新增内容', () => {
+    const original = 'services:\n  kafka:\n    environment:\n      # 监听器配置\n      - KAFKA_CFG_LISTENERS=INTERNAL://:9092\n';
+    const current = 'services:\n  kafka:\n    environment:\n      # KRaft Broker 心跳配置\n      - KAFKA_CFG_BROKER_HEARTBEAT_INTERVAL_MS=2000\n      - KAFKA_CFG_BROKER_SESSION_TIMEOUT_MS=30000\n      # 监听器配置\n      - KAFKA_CFG_LISTENERS=INTERNAL://:9092\n';
+
+    assertLineDiff(original, current, [
+        { type: 'add', text: '      # KRaft Broker 心跳配置' },
+        { type: 'add', text: '      - KAFKA_CFG_BROKER_HEARTBEAT_INTERVAL_MS=2000' },
+        { type: 'add', text: '      - KAFKA_CFG_BROKER_SESSION_TIMEOUT_MS=30000' }
+    ]);
+});
+
+test('Compose 中间删除和替换时保持未修改行对齐', () => {
+    assertLineDiff('first\nremove\nchange-before\nlast\n', 'first\nchange-after\nlast\n', [
+        { type: 'remove', text: 'remove' },
+        { type: 'remove', text: 'change-before' },
+        { type: 'add', text: 'change-after' }
+    ]);
+});
+
+test('Compose 重复行差异能够定位到真实新增行', () => {
+    assertLineDiff('services:\n  - SAME\n  - SAME\nend\n', 'services:\n  - SAME\n  - NEW\n  - SAME\nend\n', [
+        { type: 'add', text: '  - NEW' }
+    ]);
+});
+
+test('Compose 的 CRLF 与 LF 换行差异不会误报整文件修改', () => {
+    assertLineDiff('services:\r\n  app:\r\n    image: demo\r\n', 'services:\n  app:\n    image: demo\n', []);
+});
+
+test('Compose 页面差异弹窗使用行级序列对齐结果', () => {
+    const context = {
+        compose: {
+            originalContent: 'before\nanchor\nafter\n',
+            content: 'before\ninsert-one\ninsert-two\nanchor\nafter\n',
+            diffModal: { visible: false, lines: [] }
+        }
+    };
+
+    envPage.methods.showComposeDiffPreview.call(context);
+
+    assert.deepEqual(normalized(context.compose.diffModal), {
+        visible: true,
+        lines: [
+            { type: 'add', text: 'insert-one' },
+            { type: 'add', text: 'insert-two' }
+        ]
+    });
 });
 
 test('页面表格保存仅提交实际重建行并同步后续编辑基线', async () => {

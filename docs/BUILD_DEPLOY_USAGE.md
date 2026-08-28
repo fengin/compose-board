@@ -1,6 +1,6 @@
 # ComposeBoard 编译、部署和使用手册
 
-> 面向开发者、部署人员和最终使用者。本文说明如何从源码编译、如何部署运行、如何配置 Compose 项目，以及如何使用主要功能。本文适用于 v1.2.0，并包含从 v1.1.3 升级的配置迁移步骤。
+> 面向开发者、部署人员和最终使用者。本文说明如何从源码编译、如何部署运行、如何配置 Compose 项目，以及如何使用主要功能。本文适用于 v1.2.1，并包含历史版本升级步骤。
 
 ## 1. 准备条件
 
@@ -286,7 +286,7 @@ Remove-Item Env:\CGO_ENABLED
 ### 7.4 版本号注入
 
 ```powershell
-$version = "v1.2.0"
+$version = "1.2.1"
 $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
 go build -ldflags "-s -w -X main.Version=$version -X main.BuildTime=$buildTime" -o bin\composeboard.exe .
 ```
@@ -469,7 +469,13 @@ services:
 
 ## 11. 升级 ComposeBoard 自身
 
-### 11.1 从 v1.1.3 升级到 v1.2.0
+### 11.1 从 v1.2.0 升级到 v1.2.1
+
+v1.2.1 只修复 Compose 配置保存前的差异预览对齐逻辑，不修改 `config.yaml`、Compose 文件格式、API 或运行状态结构。备份并替换二进制后重启即可；登录后应在侧边栏和关于弹窗看到 `v1.2.1`。
+
+建议重点验证：在 `docker-compose.yml` 中间插入多行后打开变更确认，弹窗只显示真实新增行；保存后原文件备份、YAML 校验和服务热重载行为保持不变。
+
+### 11.2 从 v1.1.3 升级到 v1.2.0
 
 v1.1.3 的 `config.yaml` 可以直接启动 v1.2.0。缺少 `file_logs` 时功能保持关闭，Docker 控制台日志和其他页面行为与旧版一致。
 
@@ -502,7 +508,7 @@ ComposeBoard 自身升级不会自动重建业务容器。若同时增加日志 
 
 公共安装脚本会读取项目 `.env` 的安全非根 `DATA_ROOT` 并生成上述配置；无法确定安全路径时保持文件日志关闭。
 
-### 11.2 通用替换流程
+### 11.3 通用替换流程
 
 推荐流程：
 
@@ -633,6 +639,7 @@ v1.2.0 会把同一 `base_id` 下互为父子的高可信目录归并为一棵�
 | ------- | --------------------------------- |
 | Go 测试   | `go test ./...`                   |
 | 服务排序    | `node scripts\test-service-order.js` |
+| 配置编辑与差异预览 | `node scripts\test-env-editor.js` |
 | i18n 校验 | `node scripts\check-i18n-keys.js` |
 | 二进制启动   | 使用测试 `config.yaml` 启动             |
 | 登录      | 验证账号密码和 token 过期处理                |

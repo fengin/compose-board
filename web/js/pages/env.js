@@ -553,29 +553,13 @@ const EnvPage = {
             this.compose.hasChanges = true;
         },
         showComposeDiffPreview() {
-            const oldLines = this.compose.originalContent.split('\n');
-            const newLines = this.compose.content.split('\n');
-
-            // 逐行对比，生成简单 diff
-            const lines = [];
-            const maxLen = Math.max(oldLines.length, newLines.length);
-            for (let i = 0; i < maxLen; i++) {
-                const oldLine = i < oldLines.length ? oldLines[i] : undefined;
-                const newLine = i < newLines.length ? newLines[i] : undefined;
-                if (oldLine === newLine) {
-                    continue;
-                }
-                if (oldLine !== undefined && newLine !== undefined) {
-                    lines.push({ type: 'remove', text: oldLine });
-                    lines.push({ type: 'add', text: newLine });
-                } else if (oldLine !== undefined) {
-                    lines.push({ type: 'remove', text: oldLine });
-                } else {
-                    lines.push({ type: 'add', text: newLine });
-                }
-            }
-
-            this.compose.diffModal = { visible: true, lines };
+            this.compose.diffModal = {
+                visible: true,
+                lines: LineDiffUtils.buildChanges(
+                    this.compose.originalContent,
+                    this.compose.content
+                )
+            };
         },
         async saveCompose() {
             this.compose.saving = true;

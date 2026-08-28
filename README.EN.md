@@ -6,9 +6,9 @@
 
 > A lightweight visual management panel for single-node Docker Compose projects, covering daily operations, upgrades, environment editing, logs, and browser-based container terminals.
 
-[中文](README.md) | [Product Manual](docs/PRODUCT_MANUAL.md) | [Technical Overview](docs/TECHNICAL_OVERVIEW.md) | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.0 Changelog](CHANGELOG.md)
+[中文](README.md) | [Product Manual](docs/PRODUCT_MANUAL.md) | [Technical Overview](docs/TECHNICAL_OVERVIEW.md) | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.1 Changelog](CHANGELOG.md)
 
-Current version: **v1.2.0**
+Current version: **v1.2.1**
 
 Author: LingFeng（凌封）
 Homepage: https://fengin.cn  
@@ -201,7 +201,7 @@ ComposeBoard currently focuses on single-node, single-project, single-replica Co
 | [Build, Deploy and Usage](docs/BUILD_DEPLOY_USAGE.md)  | Developers, deployment owners, end users             |
 | [Development Standards](docs/DEVELOPMENT_STANDARDS.md) | Maintainers and contributors                         |
 | [Short Introduction](docs/INTRODUCTION.md)             | Quick presentation and product selection             |
-| [v1.2.0 Changelog](CHANGELOG.md)                       | Upgrade owners and release maintainers                |
+| [v1.2.1 Changelog](CHANGELOG.md)                       | Upgrade owners and release maintainers                |
 
 ## License
 

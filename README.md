@@ -6,9 +6,9 @@
 
 > 轻量级 Docker Compose 可视化管理面板，面向单机 Compose 项目的日常运维、版本升级、环境配置、日志排查和 Web 终端操作。
 
-[English](README.EN.md) | [产品功能说明](docs/PRODUCT_MANUAL.md) | [技术说明](docs/TECHNICAL_OVERVIEW.md) | [编译部署使用](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.0 变更日志](CHANGELOG.md)
+[English](README.EN.md) | [产品功能说明](docs/PRODUCT_MANUAL.md) | [技术说明](docs/TECHNICAL_OVERVIEW.md) | [编译部署使用](docs/BUILD_DEPLOY_USAGE.md) | [v1.2.1 变更日志](CHANGELOG.md)
 
-当前版本：**v1.2.0**
+当前版本：**v1.2.1**
 
 作者：凌封  
 作者主页：https://fengin.cn  
@@ -201,7 +201,7 @@ ComposeBoard 当前版本聚焦单机、单项目、单副本 Compose 运维：
 | [产品编译、部署和使用手册](docs/BUILD_DEPLOY_USAGE.md) | 开发者、部署人员、最终使用者  |
 | [开发规范文档](docs/DEVELOPMENT_STANDARDS.md)    | 后续维护者和贡献者       |
 | [产品精简介绍](docs/INTRODUCTION.md)             | 快速介绍、宣传、选型沟通    |
-| [v1.2.0 变更日志](CHANGELOG.md)                  | 升级人员、发布维护者       |
+| [v1.2.1 变更日志](CHANGELOG.md)                  | 升级人员、发布维护者       |
 
 ## 许可证
 

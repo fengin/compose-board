@@ -4,7 +4,7 @@
 
 ## 1. 产品概述
 
-ComposeBoard 是一个轻量级 Docker Compose 可视化管理面板。当前 v1.2.0 以已有 Compose 项目目录为管理对象，通过浏览器完成服务状态查看、启停、升级、重建、Profile 分组管理、`.env` 配置编辑、Docker 控制台与宿主机文件日志查看，以及 Web 终端连接。
+ComposeBoard 是一个轻量级 Docker Compose 可视化管理面板。当前 v1.2.1 以已有 Compose 项目目录为管理对象，通过浏览器完成服务状态查看、启停、升级、重建、Profile 分组管理、`.env` 配置编辑、Docker 控制台与宿主机文件日志查看，以及 Web 终端连接。
 
 它的核心设计目标是“保持 Compose 的简单性”。用户不需要把项目迁移到新的平台，也不需要引入数据库、镜像仓库代理、Kubernetes 或额外运维体系。ComposeBoard 只做单机 Compose 项目的日常可视化运维补位。
 
@@ -403,7 +403,7 @@ Web 终端基于 Docker Exec API，不需要 SSH 到宿主机。
 - [产品编译、部署和使用手册](BUILD_DEPLOY_USAGE.md)
 - [开发规范文档](DEVELOPMENT_STANDARDS.md)
 - [产品精简介绍](INTRODUCTION.md)
-- [v1.2.0 变更日志](../CHANGELOG.md)
+- [v1.2.1 变更日志](../CHANGELOG.md)
 
 
 
